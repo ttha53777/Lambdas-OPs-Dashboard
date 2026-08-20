@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First Entry — Quiet Welcome</title>
+
+<!--
+  FIRST ENTRY · QUIET WELCOME
+  ───────────────────────────────────────────────────────────────────────────
+  The brief: what a founder sees the first time they load the app. Very
+  welcoming, but SIMPLE.
+
+  WHAT SHIPS TODAY (scene 0, for contrast):
+    /create ends with window.location.assign(`/${slug}?toast=welcome`), the
+    founder lands on a dashboard whose every measure is empty, and
+    SemesterGate throws a NON-DISMISSABLE modal over the whole app demanding
+    a semester (provisionOrg seeds none). Two anti-patterns stacked: a wall,
+    then a room of nothing.
+
+  THE DEPARTURE FROM "First Entry Mock.html" (the prior exploration):
+    That mock fixed the wall by seeding artifacts and showing a RECEIPT —
+    five editable cards (term / meeting / announcement / roster / invite) on
+    arrival. Right diagnosis, but the answer is dense: the founder just
+    finished a five-step interview, and the reward for finishing is a second
+    setup screen.
+
+    This version keeps the seeding and throws away the receipt.
+
+  THE RULE THIS MOCK IS BUILT ON:
+    ONE SENTENCE. ONE PROOF. ONE MOVE.
+      · one sentence  — their name, their org, warm, no instructions
+      · one proof     — a quiet line showing the workspace is already real
+      · one move      — invite the chapter. The single action the entire
+                        product depends on at this moment (app/[slug]/page.tsx
+                        line ~1355 says exactly this in a code comment).
+    Everything else is deferred, collapsed, or absent. No checklist with five
+    open circles — a to-do list is a bill, not a welcome.
+
+  WHY THE TERM IS NOT ASKED FOR HERE:
+    lib/onboarding/draft.ts notes blueprint.term is wired server-side and
+    simply unused by the client. The interview already knows the school year.
+    So the term is SEEDED and merely stated in the proof line, reversible from
+    one quiet link. The founder is never gated on it.
+
+  PALETTE / TYPE — not invented here:
+    Tokens copied verbatim from app/components/dashboard/dashboard-ledger.css
+    (.dash[data-dashboard-theme="dusk"]). Fonts are the app's real pairing
+    (Fraunces / Geist / Geist Mono). Sidebar labels are the real NAV labels
+    from app/components/Sidebar.tsx. The greeting grammar (mono kicker +
+    serif line with an <em>) is BriefingHeader's, so this reads as the same
+    product rather than a bolted-on onboarding skin.
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500;1,9..144,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ═══ Tokens — verbatim from dashboard-ledger.css dusk block ═══════════════ */
+:root {
+  --paper:    #0f0d0a;
+  --paper-2:  #14120e;
+  --card:     #161310;
+  --card-2:   #1b1813;
+  --ink:      #ece7dd;
+  --ink-soft: #c9c2b4;
+  --muted:    #958d7c;
+  --faint:    #6b6354;
+  --line:     rgba(236,231,221,.09);
+  --line-soft:rgba(236,231,221,.05);
+  --vio:      #a78bfa;
+  --vio-deep: #7c3aed;
+  --vio-bg:   rgba(167,139,250,.10);
+  --gold:     #ddb36a;
+  --ok:       #7fb08a;
+  --ok-bg:    rgba(127,176,138,.10);
+  --rose:     #d98ba3;
+  --shadow:   0 1px 0 rgba(0,0,0,.4), 0 16px 40px -24px rgba(0,0,0,.7);
+
+  --serif: "Fraunces", Georgia, serif;
+  --sans:  "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono:  "Geist Mono", ui-monospace, Menlo, monospace;
+  --ease:  cubic-bezier(.16,1,.3,1);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--sans); overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-wrap: pretty;
+}
+/* The dashboard's paper grain. Same 4px dot lattice the ledger uses. */
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  opacity: .5;
+  background-image: radial-gradient(rgba(236,231,221,.025) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input { font: inherit; color: inherit; }
+h1,h2,h3,h4,p,ul { margin: 0; padding: 0; }
+ul { list-style: none; }
+::selection { background: var(--vio-deep); color: #fff; }
+
+/* ═══ Scene machinery (mock chrome, not product) ══════════════════════════ */
+.scr { position: fixed; inset: 0; display: none; z-index: 1; }
+.scr.on { display: block; animation: scr-in 520ms var(--ease) both; }
+@keyframes scr-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ═══ App shell ═══════════════════════════════════════════════════════════ */
+.frame { position: relative; height: 100%; display: flex; }
+
+.side {
+  flex: none; width: 218px; border-right: 1px solid var(--line);
+  padding: 18px 12px; display: flex; flex-direction: column;
+  background: var(--paper-2); position: relative; z-index: 2;
+}
+.side .org { display: flex; align-items: center; gap: 10px; padding: 2px 8px 22px; }
+.mark {
+  height: 30px; width: 30px; border-radius: 9px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-weight: 600; font-size: 12px; color: #fff;
+  background: linear-gradient(140deg, #8b6fd4, #5b3fa8);
+  border: 1px solid rgba(255,255,255,.14);
+  letter-spacing: .02em;
+}
+.side .org b { font-size: 13.5px; letter-spacing: -.012em; font-weight: 600; }
+.side .org .sub { display: block; font-size: 11px; color: var(--faint); margin-top: 1px; font-weight: 400; }
+.side .grp {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--faint); padding: 15px 10px 6px;
+}
+.side li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 8px;
+  font-size: 13px; color: var(--muted); letter-spacing: -.005em;
+}
+.side li.on { background: var(--card); color: var(--ink); }
+.side li .dot { height: 5px; width: 5px; border-radius: 50%; background: var(--faint); flex: none; }
+.side li.on .dot { background: var(--vio); box-shadow: 0 0 8px rgba(167,139,250,.6); }
+.side .foot { margin-top: auto; padding: 8px 10px; font-size: 12.5px; color: var(--faint); }
+
+/* ═══ SCENE 0 — today's wall (the problem) ════════════════════════════════ */
+/* Scoped to the main column: the shipped modal darkens the content behind it,
+   it does not grey out the sidebar. Dimming the whole frame would overstate
+   the case, and this scene has to be a fair rendering of what ships. */
+.dim .main { filter: saturate(.55); opacity: .55; }
+
+.main { flex: 1; padding: 40px 46px; overflow: hidden; position: relative; z-index: 1; }
+
+.brief-term { font-family: var(--mono); font-size: 10px; letter-spacing: .17em; text-transform: uppercase; color: var(--faint); }
+.brief-h { font-family: var(--serif); font-size: 32px; font-weight: 500; letter-spacing: -.02em; margin-top: 9px; }
+.brief-when { font-size: 13px; color: var(--muted); margin-top: 7px; }
+
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 30px; }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 15px 16px; }
+.kpi .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); }
+.kpi .v { font-family: var(--mono); font-size: 25px; margin-top: 9px; letter-spacing: -.02em; }
+.kpi .why { font-size: 11px; color: var(--faint); margin-top: 5px; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 15px 16px; }
+.card h4 { font-family: var(--mono); font-size: 9.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); font-weight: 500; }
+.card .none { font-size: 12.5px; color: var(--faint); margin-top: 11px; }
+
+/* The non-dismissable wall */
+.wall { position: absolute; inset: 0; background: rgba(8,7,5,.72); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center; z-index: 5; }
+.wall-box {
+  width: 428px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; padding: 30px 30px 26px; box-shadow: var(--shadow); text-align: center;
+}
+.wall-seal {
+  height: 40px; width: 40px; border-radius: 11px; margin: 0 auto 15px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--vio-bg); border: 1px solid rgba(167,139,250,.3); color: var(--vio);
+}
+.wall-box h3 { font-family: var(--serif); font-size: 22px; font-weight: 500; letter-spacing: -.015em; line-height: 1.3; }
+.wall-box h3 em { font-style: italic; color: var(--vio); }
+.wall-box p { font-size: 13px; color: var(--muted); line-height: 1.62; margin-top: 11px; }
+.fld {
+  width: 100%; background: var(--paper-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 11px; font-size: 13px; color: var(--ink);
+}
+.lbl { display: block; font-family: var(--mono); font-size: 9px; letter-spacing: .13em;
+       text-transform: uppercase; color: var(--faint); margin-bottom: 5px; text-align: left; }
+.wall-fields { margin-top: 20px; display: grid; gap: 11px; }
+.wall-btn {
+  width: 100%; margin-top: 17px; padding: 11px; border-radius: 9px;
+  background: var(--vio-deep); color: #fff; font-family: var(--mono);
+  font-size: 11px; letter-spacing: .13em; text-transform: uppercase; font-weight: 500;
+}
+.no-esc { margin-top: 13px; font-size: 11px; color: var(--rose); font-family: var(--mono); letter-spacing: .04em; }
+
+/* Red-pen annotation flags — mock chrome only */
+.flag {
+  position: absolute; z-index: 8; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .07em; color: var(--rose); background: rgba(217,139,163,.09);
+  border: 1px dashed rgba(217,139,163,.4); border-radius: 6px; padding: 5px 9px;
+}
+
+/* ═══ SCENE 1 — THE QUIET WELCOME (the proposal) ══════════════════════════
+   Layout logic: the welcome is NOT a card floating on a dashboard. It IS the
+   page — the dashboard's own briefing column, at rest. One measure of text,
+   generously spaced, and a single action. The nav is fully present and fully
+   live behind it: nothing is locked, so the room reads as explorable rather
+   than gated.                                                              */
+
+.hello {
+  flex: 1; overflow: hidden; position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px clamp(46px, 7vw, 96px);
+}
+/* One measure, optically centred in the room. Anchoring it left leaves a dead
+   right half at 1440+ — that reads as unfinished layout, not as calm. */
+.hello-inner { width: 100%; max-width: 560px; }
+
+/* — the one sentence — */
+.hello-kicker {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--faint);
+  opacity: 0; animation: rise 700ms var(--ease) 120ms both;
+}
+.hello-h {
+  font-family: var(--serif); font-weight: 500;
+  font-size: clamp(34px, 4.4vw, 46px); line-height: 1.14; letter-spacing: -.028em;
+  margin-top: 16px;
+  opacity: 0; animation: rise 800ms var(--ease) 220ms both;
+}
+.hello-h em { font-style: italic; color: var(--vio); }
+.hello-sub {
+  font-size: 15px; line-height: 1.68; color: var(--ink-soft);
+  margin-top: 18px; max-width: 44ch;
+  opacity: 0; animation: rise 800ms var(--ease) 340ms both;
+}
+
+/* — the one proof —
+   A single hairline row, not four stat cards. It states what already exists
+   so the founder trusts the room, and it is the ONLY place the seeded term
+   appears. Deliberately low-contrast: it is a receipt, not a headline. */
+.proof {
+  margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+  opacity: 0; animation: rise 800ms var(--ease) 460ms both;
+}
+.proof-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.proof-item .tick { color: var(--ok); flex: none; display: flex; }
+.proof-item b { color: var(--ink-soft); font-weight: 500; }
+.proof-edit {
+  font-size: 12.5px; color: var(--faint); text-decoration: underline;
+  text-underline-offset: 3px; text-decoration-color: var(--line);
+}
+.proof-edit:hover { color: var(--muted); text-decoration-color: var(--faint); }
+
+/* — the one move —
+   The invite is the whole point of the screen, so it gets the only saturated
+   surface on the page. The link is shown, not hidden behind the button: the
+   founder is about to paste it into a group chat, and seeing it is what makes
+   the button legible. */
+.move {
+  margin-top: 30px;
+  opacity: 0; animation: rise 800ms var(--ease) 580ms both;
+}
+.move-label {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--faint); margin-bottom: 10px;
+}
+.move-row {
+  display: flex; align-items: stretch; gap: 9px;
+}
+.move-link {
+  flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; padding: 12px 14px;
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft);
+  display: flex; align-items: center; overflow: hidden; white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.move-btn {
+  flex: none; padding: 12px 20px; border-radius: 10px;
+  background: var(--vio-deep); color: #fff;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .13em;
+  text-transform: uppercase; font-weight: 500;
+  display: flex; align-items: center; gap: 8px;
+  transition: background 160ms var(--ease), transform 160ms var(--ease);
+}
+.move-btn:hover { background: #6d28d9; }
+.move-btn:active { transform: translateY(1px); }
+.move-btn.done { background: var(--ok-bg); color: var(--ok); border: 1px solid rgba(127,176,138,.35); }
+.move-note { font-size: 12.5px; color: var(--faint); margin-top: 12px; line-height: 1.6; }
+
+/* — the quiet exit —
+   Not a "skip" button (which frames the welcome as an obstacle). A plain
+   sentence that hands the room over. */
+.exit {
+  margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line-soft);
+  font-size: 13px; color: var(--faint);
+  opacity: 0; animation: rise 800ms var(--ease) 700ms both;
+}
+.exit a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px;
+          text-decoration-color: var(--line); cursor: pointer; }
+.exit a:hover { color: var(--ink-soft); }
+
+@keyframes rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+
+/* Toast — reuses the app's toast grammar */
+.toast {
+  position: fixed; bottom: 26px; left: 50%; transform: translate(-50%, 14px);
+  background: var(--card-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 17px; font-size: 13px; color: var(--ink-soft);
+  box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+  transition: opacity 260ms var(--ease), transform 260ms var(--ease); z-index: 40;
+  display: flex; align-items: center; gap: 9px;
+}
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+.toast .tick { color: var(--ok); display: flex; }
+
+/* ═══ SCENE 2 — the day-two dashboard ═════════════════════════════════════
+   Shown only to make the point that the welcome is a DOOR, not a room you
+   live in. Once members join, the welcome never returns. */
+.d2-note {
+  background: var(--card); border: 1px solid var(--line); border-left: 2px solid var(--vio);
+  border-radius: 0 10px 10px 0; padding: 13px 16px; margin-top: 12px;
+  font-size: 12.5px; color: var(--muted); line-height: 1.6;
+}
+.d2-note b { color: var(--ink-soft); font-weight: 500; }
+.em-dash { color: var(--faint); }
+
+/* ═══ Scene switcher (mock chrome) ═══════════════════════════════════════ */
+.switch {
+  position: fixed; bottom: 20px; right: 20px; z-index: 60;
+  display: flex; gap: 5px; background: rgba(22,19,16,.93);
+  border: 1px solid var(--line); border-radius: 11px; padding: 5px;
+  backdrop-filter: blur(10px); box-shadow: var(--shadow);
+}
+.switch button {
+  padding: 7px 13px; border-radius: 7px; font-family: var(--mono);
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  transition: background 140ms, color 140ms;
+}
+.switch button:hover { color: var(--ink); }
+.switch button.on { background: var(--vio-bg); color: var(--vio); }
+.switch .sep { width: 1px; background: var(--line); margin: 4px 2px; }
+
+@media (max-width: 900px) {
+  .side { display: none; }
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+  .grid2 { grid-template-columns: 1fr; }
+  .hello { padding: 32px 26px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SCENE 0 · TODAY — the wall
+     Reference frame only. Two anti-patterns stacked: a room of nothing,
+     and a modal with no escape sitting on top of it.
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="scr" data-scene="0">
+  <div class="frame dim">
+    <aside class="side" data-nav="0"></aside>
+    <div class="main">
+      <div class="brief-term">No active period</div>
+      <h1 class="brief-h">Beta Theta Pi</h1>
+      <div class="brief-when">Monday, August 24</div>
+
+      <div class="kpis">
+        <div class="kpi"><div class="k">Avg attendance</div><div class="v">0.0%</div></div>
+        <div class="kpi"><div class="k">Dues outstanding</div><div class="v">$0</div></div>
+        <div class="kpi"><div class="k">Chapter GPA</div><div class="v">0.00</div></div>
+        <div class="kpi"><div class="k">Service hours</div><div class="v">0h</div><div class="why">0 of 1 on track</div></div>
+      </div>
+
+      <div class="grid2">
+        <div class="card"><h4>This week</h4><p class="none">Nothing on the agenda this week.</p></div>
+        <div class="card"><h4>Needs attention</h4><p class="none">Nothing needs attention — nice work.</p></div>
+        <div class="card"><h4>Roster</h4><p class="none">No brothers match your filters.</p></div>
+        <div class="card"><h4>Activity</h4><p class="none">No recent activity.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flag" style="top:24px; left:242px">A room of nothing</div>
+  <div class="flag" style="top:24px; right:24px">Setup gate before the product</div>
+
+  <div class="wall">
+    <div class="wall-box">
+      <div class="wall-seal">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path>
+        </svg>
+      </div>
+      <h3>Set your <em>first semester</em> to unlock the app.</h3>
+      <p>Dues, attendance, events — everything on the dashboard is scoped to a semester. Name the one you're in now.</p>
+      <div class="wall-fields">
+        <div><label class="lbl">What to call it</label><input class="fld" placeholder="e.g. Fall 2026"></div>
+        <div style="display:flex; gap:10px">
+          <div style="flex:1"><label class="lbl">Starts</label><input class="fld" type="date"></div>
+          <div style="flex:1"><label class="lbl">Ends</label><input class="fld" type="date"></div>
+        </div>
+      </div>
+      <button class="wall-btn">Create &amp; activate</button>
+      <div class="no-esc">no close · no escape · no skip</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SCENE 1 · THE QUIET WELCOME
+     One sentence. One proof. One move.
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="scr" data-scene="1">
+  <div class="frame">
+    <aside class="side" data-nav="1"></aside>
+
+    <div class="hello">
+      <div class="hello-inner">
+
+        <!-- ONE SENTENCE — their name, their org. No instruction, no task. -->
+        <div class="hello-kicker">Monday, August 24 · Fall 2026</div>
+        <h1 class="hello-h">Welcome home,<br><em>Marcus.</em></h1>
+        <p class="hello-sub">
+          Beta Theta Pi is set up and running the way you described it.
+          It's quiet in here until your chapter arrives.
+        </p>
+
+        <!-- ONE PROOF — a hairline receipt, not a stat grid. The seeded term
+             is stated here and nowhere else, with its undo inline. -->
+        <div class="proof">
+          <span class="proof-item">
+            <span class="tick"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+            <span><b>Fall 2026</b> is your active term</span>
+          </span>
+          <span class="proof-item">
+            <span class="tick"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+            <span><b>7 pages</b> and <b>5 roles</b> are live</span>
+          </span>
+          <a class="proof-edit" data-toast="Opening settings…">Adjust</a>
+        </div>
+
+        <!-- ONE MOVE — the only saturated surface on the page. -->
+        <div class="move">
+          <div class="move-label">Bring your chapter in</div>
+          <div class="move-row">
+            <div class="move-link">chaptos.app/join/8f2c-b41d-97a0</div>
+            <button class="move-btn" id="copyBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="12" height="12" rx="2"></rect>
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+              </svg>
+              <span id="copyTxt">Copy link</span>
+            </button>
+          </div>
+          <p class="move-note">
+            Paste it in your group chat. Everyone who opens it asks to join,
+            and you approve them — nobody lands in here by accident.
+          </p>
+        </div>
+
+        <!-- THE QUIET EXIT — a sentence, not a Skip button. -->
+        <div class="exit">
+          Not yet? <a data-scene-go="2">Have a look around first</a> — nothing here is locked.
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SCENE 2 · DAY TWO — the welcome is a door, not a room
+     Once a second member joins, the welcome never renders again. The
+     dashboard shows em-dashes with reasons (the shipped `tracked` vs
+     `measured` split), never fabricated zeros.
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="scr" data-scene="2">
+  <div class="frame">
+    <aside class="side" data-nav="2"></aside>
+    <div class="main">
+      <div class="brief-term">Fall 2026 · week 1</div>
+      <h1 class="brief-h">Good morning, <em style="font-style:italic;color:var(--vio)">Marcus</em>.</h1>
+      <div class="brief-when">Monday, August 24 · 34 members</div>
+
+      <div class="kpis">
+        <div class="kpi"><div class="k">Avg attendance</div><div class="v em-dash">—</div><div class="why">First meeting isn't logged yet</div></div>
+        <div class="kpi"><div class="k">Dues outstanding</div><div class="v em-dash">—</div><div class="why">No dues assigned yet</div></div>
+        <div class="kpi"><div class="k">Chapter GPA</div><div class="v em-dash">—</div><div class="why">No grades recorded yet</div></div>
+        <div class="kpi"><div class="k">Members</div><div class="v" style="color:var(--ok)">34</div><div class="why">+33 since Friday</div></div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>This week</h4>
+          <p class="none">Nothing scheduled yet — add your first meeting when you're ready.</p>
+        </div>
+        <div class="card">
+          <h4>Activity</h4>
+          <p class="none" style="color:var(--muted)">33 members joined · just now</p>
+        </div>
+      </div>
+
+      <div class="d2-note">
+        <b>The welcome is gone.</b> It renders while the roster is just you, and never again
+        — a greeting that keeps greeting you is a nag. Measures show an em-dash with a reason
+        instead of a fabricated <span style="font-family:var(--mono)">0.0%</span>, which is
+        already how the shipped dashboard separates “unset” from “measured and fine.”
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<div class="toast" id="toast">
+  <span class="tick"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+  <span id="toastTxt">Invite link copied</span>
+</div>
+
+<nav class="switch">
+  <button data-go="0">0 · today</button>
+  <div class="sep"></div>
+  <button data-go="1" class="on">1 · welcome</button>
+  <button data-go="2">2 · day two</button>
+</nav>
+
+<script>
+/* ── Sidebar: the real NAV labels from app/components/Sidebar.tsx ────────── */
+const NAV = [
+  { grp: "Overview",  items: ["Dashboard", "Timeline"] },
+  { grp: "Chapter",   items: ["Brotherhood", "Chapter", "Tasks"] },
+  { grp: "Money",     items: ["Treasury"] },
+  { grp: "Programs",  items: ["Programming", "Service"] },
+];
+
+function buildNav(el, activeLabel) {
+  const org = `
+    <div class="org">
+      <div class="mark">BΘ</div>
+      <div><b>Beta Theta Pi</b><span class="sub">chaptos.app/beta-theta-pi</span></div>
+    </div>`;
+  const groups = NAV.map(g => `
+    <div class="grp">${g.grp}</div>
+    <ul>${g.items.map(i =>
+      `<li class="${i === activeLabel ? "on" : ""}"><span class="dot"></span>${i}</li>`
+    ).join("")}</ul>`).join("");
+  el.innerHTML = org + groups + `<div class="foot">Marcus Webb · Founder</div>`;
+}
+
+document.querySelectorAll("[data-nav]").forEach(el => buildNav(el, "Dashboard"));
+
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  document.getElementById("toastTxt").textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2200);
+}
+
+/* ── The one move: copy, confirm in place, and stay put ──────────────────── */
+const copyBtn = document.getElementById("copyBtn");
+copyBtn.addEventListener("click", () => {
+  document.getElementById("copyTxt").textContent = "Copied";
+  copyBtn.classList.add("done");
+  showToast("Invite link copied");
+  setTimeout(() => {
+    document.getElementById("copyTxt").textContent = "Copy link";
+    copyBtn.classList.remove("done");
+  }, 2400);
+});
+
+document.querySelectorAll("[data-toast]").forEach(el =>
+  el.addEventListener("click", () => showToast(el.dataset.toast))
+);
+
+/* ── Scenes ─────────────────────────────────────────────────────────────── */
+function go(n) {
+  document.querySelectorAll(".scr").forEach(s =>
+    s.classList.toggle("on", s.dataset.scene === String(n)));
+  document.querySelectorAll(".switch button").forEach(b =>
+    b.classList.toggle("on", b.dataset.go === String(n)));
+  try { localStorage.setItem("fe-quiet-scene", String(n)); } catch (e) {}
+}
+document.querySelectorAll("[data-go]").forEach(b =>
+  b.addEventListener("click", () => go(b.dataset.go)));
+document.querySelectorAll("[data-scene-go]").forEach(b =>
+  b.addEventListener("click", () => go(b.dataset.sceneGo)));
+
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    const cur = Number(document.querySelector(".scr.on")?.dataset.scene ?? 1);
+    go(Math.max(0, Math.min(2, cur + (e.key === "ArrowRight" ? 1 : -1))));
+  }
+});
+
+let start = 1;
+try { const s = localStorage.getItem("fe-quiet-scene"); if (s !== null) start = Number(s); } catch (e) {}
+go(start);
+</script>
+</body>
+</html>
