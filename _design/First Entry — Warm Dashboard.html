@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First Entry — Warm Dashboard</title>
+
+<!--
+  FIRST ENTRY · WARM DASHBOARD
+  ───────────────────────────────────────────────────────────────────────────
+  The brief, corrected: the welcome should not be a PAGE that stands in front
+  of the dashboard. The founder should land on their REAL dashboard, with the
+  real briefing header, the real ledger strip, the real two-column grid — and
+  the warmth should live INSIDE that layout.
+
+  Why this is the right shape:
+    A separate welcome screen (see "First Entry — Quiet Welcome.html") teaches
+    the founder a room they will never see again, then throws it away. This
+    version teaches them THE room they will open every day, in the state that
+    room is actually in on day one. Nothing is relearned on day two — widgets
+    only fill in.
+
+  THE MOVE — every empty widget states its own first step.
+    Today the dashboard has one vocabulary for emptiness: zeros, or a flat
+    "No recent activity." Both are dead ends. Here each card answers the same
+    two questions in the same grammar:
+        what this card will show you   ·   the one move that starts it
+    So the page reads as a workshop with tools laid out, not a room of
+    nothing. The founder can start anywhere, and no single path is forced.
+
+  THE ONE PRIORITY — the invite.
+    Exactly one surface on the page is saturated: the invite card, sitting at
+    the top of the right rail where This Week normally goes. app/[slug]/page.tsx
+    (~line 1355) already says in a comment that this is "the one move the
+    entire product depends on at this moment." It gets the rail's top slot on
+    day one and is gone by day two.
+
+  THE TERM — seeded, stated, never a wall.
+    lib/onboarding/draft.ts notes blueprint.term is wired server-side and just
+    unused by the client. So SemesterGate's non-dismissable modal never fires;
+    the term is seeded from the interview and merely stated in the briefing
+    kicker, with a quiet "Adjust" beside it.
+
+  TOKENS / TYPE / STRUCTURE — not invented here:
+    · Palette copied verbatim from dashboard-ledger.css .dash[data-dashboard-theme="dusk"]
+    · Ledger strip + .grid (1fr / 338px rail) specs copied from the same file
+    · Nav labels are the real NAV from app/components/Sidebar.tsx
+    · Briefing grammar (mono kicker + serif greeting with <em>) is BriefingHeader's
+    · Em-dash-with-a-reason is the shipped `tracked` vs `measured` split
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500;1,9..144,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ═══ Tokens — verbatim from dashboard-ledger.css dusk block ═══════════════ */
+:root {
+  --paper:    #0f0d0a;
+  --paper-2:  #14120e;
+  --card:     #161310;
+  --card-2:   #1b1813;
+  --ink:      #ece7dd;
+  --ink-soft: #c9c2b4;
+  --muted:    #958d7c;
+  --faint:    #6b6354;
+  --line:     rgba(236,231,221,.09);
+  --line-soft:rgba(236,231,221,.05);
+  --vio:      #a78bfa;
+  --vio-deep: #7c3aed;
+  --vio-bg:   rgba(167,139,250,.10);
+  --gold:     #ddb36a;
+  --gold-bg:  rgba(221,179,106,.10);
+  --rose:     #d98ba3;
+  --rose-bg:  rgba(217,139,163,.10);
+  --ok:       #7fb08a;
+  --ok-bg:    rgba(127,176,138,.10);
+  --shadow:   0 1px 0 rgba(0,0,0,.4), 0 16px 40px -24px rgba(0,0,0,.7);
+
+  --serif: "Fraunces", Georgia, serif;
+  --sans:  "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono:  "Geist Mono", ui-monospace, Menlo, monospace;
+  --ease:  cubic-bezier(.16,1,.3,1);
+
+  --rail:  338px;
+  --gap:   14px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--sans); -webkit-font-smoothing: antialiased;
+  text-wrap: pretty; overflow: hidden;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  opacity: .5;
+  background-image: radial-gradient(rgba(236,231,221,.025) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input { font: inherit; color: inherit; }
+h1,h2,h3,h4,p,ul { margin: 0; padding: 0; }
+ul { list-style: none; }
+::selection { background: var(--vio-deep); color: #fff; }
+
+/* ═══ Scenes ══════════════════════════════════════════════════════════════ */
+.scr { position: fixed; inset: 0; display: none; z-index: 1; }
+.scr.on { display: block; }
+
+/* ═══ Shell ═══════════════════════════════════════════════════════════════ */
+.frame { position: relative; height: 100%; display: flex; }
+
+.side {
+  flex: none; width: 218px; border-right: 1px solid var(--line);
+  padding: 18px 12px; display: flex; flex-direction: column;
+  background: var(--paper-2); position: relative; z-index: 2;
+}
+.side .org { display: flex; align-items: center; gap: 10px; padding: 2px 8px 22px; }
+.mark {
+  height: 30px; width: 30px; border-radius: 9px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-weight: 600; font-size: 12px; color: #fff;
+  background: linear-gradient(140deg, #8b6fd4, #5b3fa8);
+  border: 1px solid rgba(255,255,255,.14); letter-spacing: .02em;
+}
+.side .org b { font-size: 13.5px; letter-spacing: -.012em; font-weight: 600; }
+.side .org .sub { display: block; font-size: 11px; color: var(--faint); margin-top: 1px; font-weight: 400; }
+.side .grp { font-family: var(--mono); font-size: 9px; letter-spacing: .18em;
+             text-transform: uppercase; color: var(--faint); padding: 15px 10px 6px; }
+.side li { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+           border-radius: 8px; font-size: 13px; color: var(--muted); letter-spacing: -.005em; }
+.side li.on { background: var(--card); color: var(--ink); }
+.side li .dot { height: 5px; width: 5px; border-radius: 50%; background: var(--faint); flex: none; }
+.side li.on .dot { background: var(--vio); box-shadow: 0 0 8px rgba(167,139,250,.6); }
+.side .foot { margin-top: auto; padding: 8px 10px; font-size: 12.5px; color: var(--faint); }
+
+.dash { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 34px clamp(18px,3vw,38px) 60px;
+        position: relative; z-index: 1; }
+.dash-inner { max-width: 1230px; margin: 0 auto; }
+
+/* ═══ Briefing ════════════════════════════════════════════════════════════ */
+.briefing { display: flex; justify-content: space-between; gap: 36px; align-items: flex-start; }
+.brief-kicker { font-family: var(--mono); font-size: 10px; letter-spacing: .17em;
+                text-transform: uppercase; color: var(--faint);
+                display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.brief-adjust { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em;
+                text-transform: uppercase; color: var(--faint);
+                border-bottom: 1px solid var(--line); padding-bottom: 1px; }
+.brief-adjust:hover { color: var(--vio); border-color: var(--vio); }
+.greeting { font-family: var(--serif); font-weight: 500; font-size: clamp(26px,4.4vw,33px);
+            letter-spacing: -.02em; margin-top: 10px; line-height: 1.15; }
+.greeting em { font-style: italic; color: var(--vio); }
+.brief-sub { font-size: 13.5px; color: var(--muted); margin-top: 9px; line-height: 1.6; max-width: 52ch; }
+
+/* Day-one welcome note — sits in the briefing, replacing the health dial that
+   has nothing to composite yet. Not a card: a spoken line, ranged left against
+   the dial's slot so the header keeps its two-column balance. */
+.brief-aside {
+  flex: none; width: 262px; padding: 15px 17px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.brief-aside .k { font-family: var(--mono); font-size: 9px; letter-spacing: .16em;
+                  text-transform: uppercase; color: var(--faint); }
+.brief-aside p { font-size: 12.5px; color: var(--ink-soft); line-height: 1.62; margin-top: 9px; }
+.brief-aside .tick { color: var(--ok); }
+
+/* ═══ Ledger strip — spec copied from .dash .ledger ═══════════════════════ */
+.ledger { margin-top: var(--gap); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+          border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+          box-shadow: var(--shadow); overflow: hidden; }
+.measure { padding: 16px 18px 14px; border-right: 1px solid var(--line-soft);
+           position: relative; text-align: left; }
+.measure:last-child { border-right: none; }
+.measure .k { font-family: var(--mono); font-size: 9px; letter-spacing: .16em;
+              text-transform: uppercase; color: var(--muted); }
+.measure .v { font-family: var(--mono); font-size: 23px; font-weight: 500; letter-spacing: -.02em;
+              color: var(--ink); margin-top: 7px; font-variant-numeric: tabular-nums; }
+.measure .v.unset { color: var(--faint); }
+.measure .note { font-size: 11px; color: var(--faint); margin-top: 3px; overflow-wrap: anywhere; }
+/* The first-step link inside an unset measure. This is the whole idea: an
+   absence that names its own remedy, in the same slot the reason would sit. */
+.measure .note-act { font: inherit; color: var(--vio); cursor: pointer; white-space: nowrap; }
+.measure .note-act:hover { text-decoration: underline; }
+
+/* ═══ Grid — spec copied from .dash .grid ═════════════════════════════════ */
+.grid { margin-top: var(--gap); display: grid; grid-template-columns: 1fr var(--rail);
+        gap: var(--gap); align-items: start; }
+.col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+
+.card { border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+        box-shadow: var(--shadow); overflow: hidden; }
+.card-h { display: flex; align-items: baseline; justify-content: space-between;
+          padding: 15px 18px 12px; border-bottom: 1px solid var(--line-soft); }
+.card-h h2 { font-family: var(--serif); font-weight: 500; font-size: 16.5px; color: var(--ink); }
+.card-h .sub { font-family: var(--mono); font-size: 9.5px; letter-spacing: .13em;
+               text-transform: uppercase; color: var(--faint); }
+.card-b { padding: 16px 18px 18px; }
+
+/* ═══ THE EMPTY-STATE GRAMMAR ═════════════════════════════════════════════
+   Every empty widget says the same two things in the same shape:
+     .es-what  — what this card will show you, once it has something
+     .es-do    — the one move that starts it
+   Consistency is what turns eight empty cards from a wasteland into a menu. */
+.es { display: flex; flex-direction: column; align-items: flex-start; gap: 11px; }
+.es-what { font-size: 12.5px; color: var(--muted); line-height: 1.62; }
+.es-do {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .11em; text-transform: uppercase;
+  color: var(--ink-soft); border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 12px; display: inline-flex; align-items: center; gap: 7px;
+  transition: border-color 150ms var(--ease), color 150ms var(--ease), background 150ms var(--ease);
+}
+.es-do:hover { color: var(--vio); border-color: var(--vio); background: var(--vio-bg); }
+.es-do .plus { font-size: 13px; line-height: 1; opacity: .8; }
+
+/* ═══ THE ONE PRIORITY — invite card ══════════════════════════════════════
+   The only saturated surface on the page. Top of the rail on day one, absent
+   on day two. */
+.invite { border-color: rgba(167,139,250,.32); background:
+          linear-gradient(180deg, rgba(167,139,250,.07), rgba(167,139,250,.02)); }
+.invite .card-h { border-bottom-color: rgba(167,139,250,.16); }
+.invite .card-h h2 { color: var(--ink); }
+.invite .card-h .sub { color: var(--vio); }
+.invite-why { font-size: 12.5px; color: var(--ink-soft); line-height: 1.62; }
+.invite-link {
+  margin-top: 13px; background: var(--paper-2); border: 1px solid var(--line);
+  border-radius: 9px; padding: 10px 12px; font-family: var(--mono); font-size: 11.5px;
+  color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.invite-btn {
+  margin-top: 10px; width: 100%; padding: 11px; border-radius: 9px;
+  background: var(--vio-deep); color: #fff; font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: .13em; text-transform: uppercase; font-weight: 500;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background 150ms var(--ease), transform 120ms var(--ease);
+}
+.invite-btn:hover { background: #6d28d9; }
+.invite-btn:active { transform: translateY(1px); }
+.invite-btn.done { background: var(--ok-bg); color: var(--ok); box-shadow: inset 0 0 0 1px rgba(127,176,138,.35); }
+.invite-note { font-size: 11.5px; color: var(--faint); margin-top: 10px; line-height: 1.6; }
+
+/* ═══ Roster — the founder's own row ══════════════════════════════════════ */
+.rrow { display: flex; align-items: center; gap: 11px; padding: 11px 0;
+        border-bottom: 1px solid var(--line-soft); }
+.rrow:last-of-type { border-bottom: none; }
+.av { height: 30px; width: 30px; border-radius: 50%; flex: none;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: #fff;
+      background: linear-gradient(140deg, #8b6fd4, #5b3fa8); }
+.rrow .nm { font-size: 13px; color: var(--ink); }
+.rrow .rl { font-size: 11.5px; color: var(--faint); margin-top: 1px; }
+.rrow .you { font-family: var(--mono); font-size: 9px; letter-spacing: .12em;
+             text-transform: uppercase; color: var(--vio); background: var(--vio-bg);
+             border-radius: 999px; padding: 3px 8px; margin-left: auto; }
+
+/* Ghost rows — the seats waiting to be filled. Deliberately NOT fake members:
+   no names, no numbers. They show the shape the table will take, so a one-row
+   roster doesn't read as broken. */
+.ghost { display: flex; align-items: center; gap: 11px; padding: 11px 0;
+         border-bottom: 1px solid var(--line-soft); opacity: .5; }
+.ghost:last-child { border-bottom: none; }
+.ghost .gav { height: 30px; width: 30px; border-radius: 50%; flex: none;
+              border: 1px dashed var(--line); }
+.ghost .gbar { height: 7px; border-radius: 4px; background: rgba(236,231,221,.055); }
+
+/* ═══ Activity — the one true entry ═══════════════════════════════════════ */
+.act { display: flex; gap: 10px; align-items: flex-start; padding: 3px 0; }
+.act .dot { height: 6px; width: 6px; border-radius: 50%; background: var(--ok);
+            margin-top: 6px; flex: none; }
+.act p { font-size: 12.5px; color: var(--ink-soft); line-height: 1.55; }
+.act time { font-size: 11px; color: var(--faint); display: block; margin-top: 2px; }
+
+/* ═══ Day-two deltas ══════════════════════════════════════════════════════ */
+.d2-note { background: var(--card); border: 1px solid var(--line);
+           border-left: 2px solid var(--vio); border-radius: 0 10px 10px 0;
+           padding: 13px 16px; margin-top: var(--gap); font-size: 12.5px;
+           color: var(--muted); line-height: 1.62; }
+.d2-note b { color: var(--ink-soft); font-weight: 500; }
+.bar { height: 6px; border-radius: 4px; background: rgba(236,231,221,.07); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--vio); border-radius: 4px; }
+
+/* Annotation flags — mock chrome only */
+.flag { position: absolute; z-index: 8; font-family: var(--mono); font-size: 10px;
+        letter-spacing: .07em; color: var(--rose); background: rgba(217,139,163,.09);
+        border: 1px dashed rgba(217,139,163,.4); border-radius: 6px; padding: 5px 9px; }
+.dimmed .dash { filter: saturate(.55); opacity: .5; }
+
+/* Wall (scene 0) */
+.wall { position: absolute; inset: 0; background: rgba(8,7,5,.72); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center; z-index: 5; }
+.wall-box { width: 420px; background: var(--card); border: 1px solid var(--line);
+            border-radius: 16px; padding: 30px; box-shadow: var(--shadow); text-align: center; }
+.wall-box h3 { font-family: var(--serif); font-size: 21px; font-weight: 500; line-height: 1.3; }
+.wall-box h3 em { font-style: italic; color: var(--vio); }
+.wall-box p { font-size: 13px; color: var(--muted); line-height: 1.62; margin-top: 11px; }
+.fld { width: 100%; background: var(--paper-2); border: 1px solid var(--line);
+       border-radius: 8px; padding: 9px 11px; font-size: 13px; color: var(--ink); }
+.lbl { display: block; font-family: var(--mono); font-size: 9px; letter-spacing: .13em;
+       text-transform: uppercase; color: var(--faint); margin-bottom: 5px; text-align: left; }
+.wall-btn { width: 100%; margin-top: 17px; padding: 11px; border-radius: 9px;
+            background: var(--vio-deep); color: #fff; font-family: var(--mono);
+            font-size: 11px; letter-spacing: .13em; text-transform: uppercase; }
+.no-esc { margin-top: 13px; font-size: 11px; color: var(--rose); font-family: var(--mono); }
+
+/* Toast */
+.toast { position: fixed; bottom: 26px; left: 50%; transform: translate(-50%, 14px);
+         background: var(--card-2); border: 1px solid var(--line); border-radius: 10px;
+         padding: 11px 17px; font-size: 13px; color: var(--ink-soft); box-shadow: var(--shadow);
+         opacity: 0; pointer-events: none; z-index: 40; display: flex; align-items: center; gap: 9px;
+         transition: opacity 260ms var(--ease), transform 260ms var(--ease); }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+.toast .tick { color: var(--ok); display: flex; }
+
+/* Scene switcher */
+.switch { position: fixed; bottom: 20px; right: 20px; z-index: 60; display: flex; gap: 5px;
+          background: rgba(22,19,16,.93); border: 1px solid var(--line); border-radius: 11px;
+          padding: 5px; backdrop-filter: blur(10px); box-shadow: var(--shadow); }
+.switch button { padding: 7px 13px; border-radius: 7px; font-family: var(--mono); font-size: 10px;
+                 letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.switch button:hover { color: var(--ink); }
+.switch button.on { background: var(--vio-bg); color: var(--vio); }
+.switch .sep { width: 1px; background: var(--line); margin: 4px 2px; }
+
+/* Entrance — the page settles once, together. */
+.stagger > * { opacity: 0; animation: rise 640ms var(--ease) both; }
+.stagger > *:nth-child(1) { animation-delay: 60ms; }
+.stagger > *:nth-child(2) { animation-delay: 150ms; }
+.stagger > *:nth-child(3) { animation-delay: 240ms; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 1279px) {
+  .grid { grid-template-columns: 1fr; }
+  .briefing { flex-wrap: wrap; gap: 20px; }
+  .brief-aside { width: 100%; }
+}
+@media (max-width: 900px) {
+  .side { display: none; }
+  .ledger { grid-auto-flow: row; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SCENE 0 · TODAY — the wall over a room of zeros
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="scr" data-scene="0">
+  <div class="frame dimmed">
+    <aside class="side" data-nav></aside>
+    <div class="dash">
+      <div class="dash-inner">
+        <div class="briefing">
+          <div>
+            <div class="brief-kicker">No active period</div>
+            <h1 class="greeting">Beta Theta Pi</h1>
+            <p class="brief-sub">Monday, August 24</p>
+          </div>
+        </div>
+        <div class="ledger">
+          <div class="measure"><div class="k">Avg attendance</div><div class="v">0.0%</div></div>
+          <div class="measure"><div class="k">Dues outstanding</div><div class="v">$0</div></div>
+          <div class="measure"><div class="k">Chapter GPA</div><div class="v">0.00</div></div>
+          <div class="measure"><div class="k">Service hours</div><div class="v">0h</div><div class="note">0 of 1 on track</div></div>
+        </div>
+        <div class="grid">
+          <div class="col">
+            <div class="card"><div class="card-h"><h2>Needs attention</h2></div>
+              <div class="card-b"><p class="es-what">Nothing needs attention — nice work.</p></div></div>
+            <div class="card"><div class="card-h"><h2>Roster</h2></div>
+              <div class="card-b"><p class="es-what">No brothers match your filters.</p></div></div>
+          </div>
+          <div class="col">
+            <div class="card"><div class="card-h"><h2>This week</h2></div>
+              <div class="card-b"><p class="es-what">Nothing on the agenda this week.</p></div></div>
+            <div class="card"><div class="card-h"><h2>Activity</h2></div>
+              <div class="card-b"><p class="es-what">No recent activity.</p></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="flag" style="top:22px; left:238px">Zeros presented as measurements</div>
+  <div class="flag" style="top:22px; right:22px">Dead-end empties · no next step anywhere</div>
+
+  <div class="wall">
+    <div class="wall-box">
+      <h3>Set your <em>first semester</em> to unlock the app.</h3>
+      <p>Dues, attendance, events — everything on the dashboard is scoped to a semester. Name the one you're in now.</p>
+      <div style="margin-top:20px; display:grid; gap:11px">
+        <div><label class="lbl">What to call it</label><input class="fld" placeholder="e.g. Fall 2026"></div>
+        <div style="display:flex; gap:10px">
+          <div style="flex:1"><label class="lbl">Starts</label><input class="fld" type="date"></div>
+          <div style="flex:1"><label class="lbl">Ends</label><input class="fld" type="date"></div>
+        </div>
+      </div>
+      <button class="wall-btn">Create &amp; activate</button>
+      <div class="no-esc">no close · no escape · no skip</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SCENE 1 · DAY ONE — the same dashboard, awake
+     Real briefing, real ledger strip, real grid. No modal, no separate page.
+     Every empty widget names its own first step; exactly one is saturated.
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="scr" data-scene="1">
+  <div class="frame">
+    <aside class="side" data-nav></aside>
+    <div class="dash">
+      <div class="dash-inner stagger">
+
+        <!-- BRIEFING — warmth lives here, in the header the founder keeps forever -->
+        <div class="briefing">
+          <div>
+            <div class="brief-kicker">
+              <span>Monday, August 24 · Fall 2026</span>
+              <button class="brief-adjust" data-toast="Opening term settings…">Adjust</button>
+            </div>
+            <h1 class="greeting">Welcome home, <em>Marcus</em>.</h1>
+            <p class="brief-sub">
+              Beta Theta Pi is built and running the way you described it.
+              It's quiet in here until your chapter arrives — start anywhere below.
+            </p>
+          </div>
+
+          <div class="brief-aside">
+            <div class="k">Ready to go</div>
+            <p>
+              <span class="tick">✓</span> <b style="color:var(--ink);font-weight:500">Fall 2026</b> is your active term<br>
+              <span class="tick">✓</span> 7 pages and 5 roles are live<br>
+              <span class="tick">✓</span> You're seated as Founder
+            </p>
+          </div>
+        </div>
+
+        <!-- LEDGER — em-dashes that name their own first step -->
+        <div class="ledger">
+          <div class="measure">
+            <div class="k">Avg attendance</div>
+            <div class="v unset">—</div>
+            <div class="note">After your <button class="note-act" data-toast="Opening Chapter → meetings…">first meeting</button></div>
+          </div>
+          <div class="measure">
+            <div class="k">Dues outstanding</div>
+            <div class="v unset">—</div>
+            <div class="note">Once you <button class="note-act" data-toast="Opening Treasury → dues…">set dues</button></div>
+          </div>
+          <div class="measure">
+            <div class="k">Chapter GPA</div>
+            <div class="v unset">—</div>
+            <div class="note">When grades are recorded</div>
+          </div>
+          <div class="measure">
+            <div class="k">Members</div>
+            <div class="v">1</div>
+            <div class="note">Just you, for now</div>
+          </div>
+        </div>
+
+        <!-- GRID — the real two-column layout -->
+        <div class="grid">
+
+          <!-- MAIN COLUMN -->
+          <div class="col">
+
+            <div class="card">
+              <div class="card-h"><h2>Roster</h2><span class="sub">1 member</span></div>
+              <div class="card-b">
+                <div class="rrow">
+                  <div class="av">MW</div>
+                  <div><div class="nm">Marcus Webb</div><div class="rl">Founder · President</div></div>
+                  <span class="you">You</span>
+                </div>
+                <!-- Ghost seats: the shape of the table, with nothing invented. -->
+                <div class="ghost"><div class="gav"></div><div style="flex:1"><div class="gbar" style="width:120px"></div><div class="gbar" style="width:76px;margin-top:6px;height:6px"></div></div></div>
+                <div class="ghost"><div class="gav"></div><div style="flex:1"><div class="gbar" style="width:98px"></div><div class="gbar" style="width:64px;margin-top:6px;height:6px"></div></div></div>
+                <p class="es-what" style="margin-top:14px">
+                  Your chapter shows up here as they join — with attendance, dues and standing on each row.
+                </p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><h2>This week</h2><span class="sub">Aug 24 — Aug 30</span></div>
+              <div class="card-b">
+                <div class="es">
+                  <p class="es-what">
+                    Meetings, socials and deadlines land here as you schedule them,
+                    so Monday morning tells you the week in one look.
+                  </p>
+                  <button class="es-do" data-toast="Opening the event composer…"><span class="plus">+</span> Add your first event</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- RAIL -->
+          <div class="col">
+
+            <!-- THE ONE PRIORITY -->
+            <div class="card invite">
+              <div class="card-h"><h2>Bring your chapter in</h2><span class="sub">Start here</span></div>
+              <div class="card-b">
+                <p class="invite-why">
+                  Everything else fills in once people are here. Send one link.
+                </p>
+                <div class="invite-link">chaptos.app/join/8f2c-b41d-97a0</div>
+                <button class="invite-btn" id="copyBtn">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="12" height="12" rx="2"></rect>
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                  </svg>
+                  <span id="copyTxt">Copy invite link</span>
+                </button>
+                <p class="invite-note">
+                  Whoever opens it asks to join, and you approve them — nobody lands in here by accident.
+                </p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><h2>Treasury</h2><span class="sub">Fall 2026</span></div>
+              <div class="card-b">
+                <div class="es">
+                  <p class="es-what">
+                    Your balance and where the money went, tracked across the term.
+                  </p>
+                  <button class="es-do" data-toast="Opening Treasury → opening balance…"><span class="plus">+</span> Set opening balance</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><h2>Activity</h2></div>
+              <div class="card-b">
+                <div class="act">
+                  <span class="dot"></span>
+                  <div><p>Beta Theta Pi was created</p><time>just now</time></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SCENE 2 · DAY TWO — nothing is relearned
+     Same layout, same slots. The invite card is gone, widgets fill in.
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="scr" data-scene="2">
+  <div class="frame">
+    <aside class="side" data-nav></aside>
+    <div class="dash">
+      <div class="dash-inner">
+
+        <div class="briefing">
+          <div>
+            <div class="brief-kicker"><span>Monday, August 31 · Fall 2026 · week 2</span></div>
+            <h1 class="greeting">Good morning, <em>Marcus</em>.</h1>
+            <p class="brief-sub">34 members · first meeting logged Thursday</p>
+          </div>
+          <div class="brief-aside">
+            <div class="k">Chapter health</div>
+            <p style="font-family:var(--mono); font-size:26px; color:var(--ink); margin-top:8px">78<span style="font-size:13px;color:var(--muted)"> / 100</span></p>
+            <p style="margin-top:6px; font-size:11.5px; color:var(--ok)">Healthy</p>
+          </div>
+        </div>
+
+        <div class="ledger">
+          <div class="measure"><div class="k">Avg attendance</div><div class="v">88.2%</div><div class="note">31 of 34 present</div></div>
+          <div class="measure"><div class="k">Dues outstanding</div><div class="v">$1,240</div><div class="note">9 members owe</div></div>
+          <div class="measure"><div class="k">Chapter GPA</div><div class="v unset">—</div><div class="note">When grades are recorded</div></div>
+          <div class="measure"><div class="k">Members</div><div class="v">34</div><div class="note">+33 this week</div></div>
+        </div>
+
+        <div class="grid">
+          <div class="col">
+            <div class="card">
+              <div class="card-h"><h2>Roster</h2><span class="sub">34 members</span></div>
+              <div class="card-b">
+                <div class="rrow"><div class="av">MW</div><div><div class="nm">Marcus Webb</div><div class="rl">Founder · President</div></div><span class="you">You</span></div>
+                <div class="rrow"><div class="av" style="background:linear-gradient(140deg,#9a6b1f,#ddb36a)">JT</div><div><div class="nm">Jordan Tate</div><div class="rl">Treasurer</div></div></div>
+                <div class="rrow"><div class="av" style="background:linear-gradient(140deg,#3f6e4e,#7fb08a)">DR</div><div><div class="nm">Devin Ross</div><div class="rl">Social Chair</div></div></div>
+                <div class="rrow"><div class="av" style="background:linear-gradient(140deg,#2f5d7c,#7fb3d9)">AK</div><div><div class="nm">Amir Khan</div><div class="rl">Member</div></div></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-h"><h2>This week</h2><span class="sub">Aug 31 — Sep 6</span></div>
+              <div class="card-b">
+                <div class="act"><span class="dot" style="background:var(--vio)"></span><div><p>Chapter Meeting</p><time>Thursday · 7:00 PM</time></div></div>
+                <div class="act" style="margin-top:10px"><span class="dot" style="background:var(--gold)"></span><div><p>Dues deadline — first installment</p><time>Friday</time></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="card">
+              <div class="card-h"><h2>Treasury</h2><span class="sub">Fall 2026</span></div>
+              <div class="card-b">
+                <div style="font-family:var(--mono); font-size:23px">$4,820</div>
+                <div style="font-size:11.5px; color:var(--faint); margin-top:4px">Balance · projected $9,140</div>
+                <div class="bar" style="margin-top:12px"><i style="width:53%"></i></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-h"><h2>Activity</h2></div>
+              <div class="card-b">
+                <div class="act"><span class="dot"></span><div><p>Attendance logged for Chapter Meeting</p><time>3 days ago</time></div></div>
+                <div class="act" style="margin-top:10px"><span class="dot"></span><div><p>33 members joined</p><time>6 days ago</time></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d2-note">
+          <b>Nothing was relearned.</b> Same header, same strip, same slots — the invite card
+          simply retires once the roster grows past one, and each widget replaces its first-step
+          prompt with real data. Chapter GPA still shows an em-dash with a reason, because that
+          measure genuinely has nothing behind it yet.
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<div class="toast" id="toast">
+  <span class="tick"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+  <span id="toastTxt">Invite link copied</span>
+</div>
+
+<nav class="switch">
+  <button data-go="0">0 · today</button>
+  <div class="sep"></div>
+  <button data-go="1" class="on">1 · day one</button>
+  <button data-go="2">2 · day two</button>
+</nav>
+
+<script>
+/* Real NAV labels from app/components/Sidebar.tsx */
+const NAV = [
+  { grp: "Overview", items: ["Dashboard", "Timeline"] },
+  { grp: "Chapter",  items: ["Brotherhood", "Chapter", "Tasks"] },
+  { grp: "Money",    items: ["Treasury"] },
+  { grp: "Programs", items: ["Programming", "Service"] },
+];
+document.querySelectorAll("[data-nav]").forEach(el => {
+  el.innerHTML =
+    `<div class="org"><div class="mark">BΘ</div>
+       <div><b>Beta Theta Pi</b><span class="sub">chaptos.app/beta-theta-pi</span></div></div>` +
+    NAV.map(g => `<div class="grp">${g.grp}</div><ul>` +
+      g.items.map(i => `<li class="${i === "Dashboard" ? "on" : ""}"><span class="dot"></span>${i}</li>`).join("") +
+      `</ul>`).join("") +
+    `<div class="foot">Marcus Webb · Founder</div>`;
+});
+
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  document.getElementById("toastTxt").textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2200);
+}
+
+const copyBtn = document.getElementById("copyBtn");
+copyBtn.addEventListener("click", () => {
+  document.getElementById("copyTxt").textContent = "Copied";
+  copyBtn.classList.add("done");
+  showToast("Invite link copied");
+  setTimeout(() => {
+    document.getElementById("copyTxt").textContent = "Copy invite link";
+    copyBtn.classList.remove("done");
+  }, 2400);
+});
+
+document.querySelectorAll("[data-toast]").forEach(el =>
+  el.addEventListener("click", () => showToast(el.dataset.toast)));
+
+function go(n) {
+  document.querySelectorAll(".scr").forEach(s => s.classList.toggle("on", s.dataset.scene === String(n)));
+  document.querySelectorAll(".switch button").forEach(b => b.classList.toggle("on", b.dataset.go === String(n)));
+  try { localStorage.setItem("fe-warm-scene", String(n)); } catch (e) {}
+}
+document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => go(b.dataset.go)));
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    const cur = Number(document.querySelector(".scr.on")?.dataset.scene ?? 1);
+    go(Math.max(0, Math.min(2, cur + (e.key === "ArrowRight" ? 1 : -1))));
+  }
+});
+
+let start = 1;
+try { const s = localStorage.getItem("fe-warm-scene"); if (s !== null) start = Number(s); } catch (e) {}
+go(start);
+</script>
+</body>
+</html>
