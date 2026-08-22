@@ -1,0 +1,1039 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meeting Notes Card — test cases</title>
+
+<!--
+  MEETING NOTES CARD — every state the timeline rail can land in.
+
+  WHAT SHIPPED (49f5fb6+): a chapter meeting's `description` IS its minutes —
+  the same column the Chapter page's minutes textarea writes. The timeline rail
+  used to dump that whole field into a one-line `.ev-meta-row`. It now renders a
+  dedicated block that prefers `notesSummary` when one exists and falls back to
+  the raw minutes when the user never summarized.
+
+  Three inputs decide what renders. They are independent, so the card has more
+  states than the two the feature was described in:
+
+      description      the minutes (may be empty, 4 chars, or 1700)
+      notesSummary     the AI recap (may be absent)
+      notesSummaryAt   vs notesUpdatedAt -> stale or fresh
+
+  This file walks all of them, in the order a real meeting moves through them:
+  a row with nothing, a row with scribbles, a row with real minutes and no
+  summary, the summarized frame, the stale frame, and then the edge cases that
+  only show up on real data.
+
+  WHY A MOCK AND NOT SCREENSHOTS: cases 1, 2, 6, 7 and 8 do not exist in the dev
+  DB, and two of them (6, 8) are states I want to argue are WRONG. A mock is the
+  only way to put the shipped rendering and the proposed one side by side.
+
+  Cases 6-8 carry a PROPOSED variant. Those are NOT shipped — they are the
+  open questions this file exists to settle. Everything under a "SHIPPED" badge
+  is what app/[slug]/timeline/page.tsx renders today, verbatim.
+
+  Palette: dusk tokens copied verbatim from dashboard-ledger.css:36-61. Card
+  classes (.ev, .ev-hero, .ev-meta, .ev-notes*) ported verbatim from
+  timeline-ledger.css:284-332 so the mock measures what the app actually
+  renders. Mock-only chrome lives outside `.dash` and is prefixed `mk-`.
+
+  The summary and minutes in cases 4/5/7 are the REAL strings from dev event #5
+  (LPE "Chapter Meeting", 2026-06-09) — not written for the mock.
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ══════════════════════════════════════════════════════════════════════════
+   TOKENS — dusk, verbatim from dashboard-ledger.css:36-61
+   ══════════════════════════════════════════════════════════════════════════ */
+.dash {
+  --serif: "Fraunces", Georgia, serif;
+  --sans:  "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono:  "Geist Mono", ui-monospace, Menlo, monospace;
+}
+.dash[data-dashboard-theme="dusk"] {
+  --paper:    #0f0d0a;  --paper-2:  #14120e;
+  --card:     #161310;  --card-2:   #1b1813;
+  --ink:      #ece7dd;  --ink-soft: #c9c2b4;
+  --muted:    #958d7c;  --faint:    #6b6354;
+  --line:     rgba(236,231,221,.09);
+  --line-soft:rgba(236,231,221,.05);
+  --vio:      #a78bfa;  --vio-deep: #7c3aed;  --vio-bg: rgba(167,139,250,.10);
+  --gold:     #ddb36a;  --gold-bg:  rgba(221,179,106,.10);
+  --rose:     #d98ba3;  --rose-bg:  rgba(217,139,163,.10);
+  --ok:       #7fb08a;  --ok-bg:    rgba(127,176,138,.10);
+  --shadow:   0 1px 0 rgba(0,0,0,.4), 0 16px 40px -24px rgba(0,0,0,.7);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CARD CLASSES — verbatim from timeline-ledger.css:284-332
+   The rail is 338px wide in the app (--dash-rail-width); .mk-rail pins that.
+   ══════════════════════════════════════════════════════════════════════════ */
+.dash { font-family: var(--sans); font-size: 13.5px; line-height: 1.45; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.dash * { margin: 0; padding: 0; box-sizing: border-box; }
+
+.dash .ev { display: flex; flex-direction: column; gap: 12px; }
+.dash .ev-hero { border: 1px solid var(--line); border-radius: 12px; background: var(--card); box-shadow: var(--shadow); padding: 14px 16px; position: relative; overflow: hidden; }
+.dash .ev-hero::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--catc); }
+.dash .ev-hero .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.dash .ev-hero .cat { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--catc); }
+.dash .ev-hero .cat::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--catc); margin-right: 7px; vertical-align: 1px; }
+.dash .ev-hero .req { font-family: var(--mono); font-size: 8.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--vio); background: var(--vio-bg); border-radius: 4px; padding: 2px 6px; }
+.dash .ev-hero h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; line-height: 1.25; color: var(--ink); }
+.dash .ev-hero .date { margin-top: 8px; display: flex; align-items: baseline; gap: 8px; }
+.dash .ev-hero .date .d { font-family: var(--mono); font-size: 12px; color: var(--catc); }
+.dash .ev-hero .date .rel { font-size: 11px; color: var(--faint); }
+
+.dash .ev-meta { display: flex; flex-direction: column; gap: 6px; }
+.dash .ev-meta-row { border: 1px solid var(--line-soft); border-radius: 9px; background: var(--card); padding: 9px 12px; font-size: 12px; color: var(--ink-soft); }
+.dash .ev-meta-row .lab { font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-right: 8px; }
+
+/* — the meeting notes block, verbatim — */
+.dash .ev-notes { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--card); padding: 11px 13px; }
+.dash .ev-notes.summary { border-color: var(--vio-bg); background: var(--vio-bg); }
+.dash .ev-notes.summary.stale { border-color: var(--gold-bg); background: var(--gold-bg); }
+.dash .ev-notes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dash .ev-notes-head .lab { font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.dash .ev-notes-head .ai-badge { display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: 8.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--vio); border: 1px solid var(--vio-bg); background: var(--vio-bg); border-radius: 4px; padding: 2px 5px; }
+.dash .ev-notes.stale .ev-notes-head .ai-badge { color: var(--gold); border-color: var(--gold-bg); background: var(--gold-bg); }
+.dash .ev-notes-head .ai-badge svg { stroke: currentColor; }
+.dash .ev-notes-head .gen { font-family: var(--mono); font-size: 9px; color: var(--faint); }
+.dash .ev-notes-stale { font-size: 10.5px; color: var(--gold); margin-bottom: 7px; }
+.dash .ev-notes-body { display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.55; color: var(--ink-soft);
+  max-height: 320px; overflow-y: auto; }
+.dash .ev-notes-body.raw { white-space: pre-wrap; }
+.dash .ev-notes-body strong { font-weight: 600; color: var(--ink); }
+.dash .ev-notes-body ul { margin: 0; padding-left: 16px; list-style: disc; display: flex; flex-direction: column; gap: 4px; }
+.dash .ev-notes-body .sec { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--vio); }
+.dash .ev-notes.stale .ev-notes-body .sec { color: var(--gold); }
+
+/* PROPOSED-only additions (cases 6-8). Not in timeline-ledger.css today. */
+.dash .ev-notes .ev-notes-hint { font-size: 11px; line-height: 1.5; color: var(--faint); }
+.dash .ev-notes .ev-notes-act { margin-top: 9px; display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--vio); background: var(--vio-bg); border: 1px solid var(--vio-bg); border-radius: 7px;
+  padding: 6px 10px; cursor: pointer; }
+.dash .ev-notes .ev-notes-act svg { stroke: currentColor; }
+.dash .ev-notes.stale .ev-notes-act { color: var(--gold); background: var(--gold-bg); border-color: var(--gold-bg); }
+.dash .ev-notes-more { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--muted); background: none; border-left: 0; border-right: 0; border-bottom: 0; cursor: pointer; text-align: left; }
+.dash .ev-notes-more:hover { color: var(--ink); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOCK CHROME (mk-)
+   ══════════════════════════════════════════════════════════════════════════ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0f0d0a; color: #ece7dd; font-family: "Geist", -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased; }
+
+.mk-wrap { max-width: 1500px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 60px) 130px; }
+
+.mk-mast { padding: 78px 0 22px; border-bottom: 1px solid rgba(236,231,221,.09); }
+.mk-mast .eyebrow { font-family: "Geist Mono", monospace; font-size: 10px; letter-spacing: .22em;
+  text-transform: uppercase; color: #6b6354; }
+.mk-mast h1 { font-family: "Fraunces", serif; font-weight: 400; font-size: clamp(32px, 5vw, 50px);
+  line-height: 1.06; margin-top: 16px; letter-spacing: -.01em; }
+.mk-mast h1 em { font-style: italic; color: #a78bfa; }
+.mk-mast .lede { max-width: 680px; margin-top: 18px; font-size: 14.5px; line-height: 1.62; color: #c9c2b4; }
+.mk-mast .lede b { color: #ece7dd; font-weight: 550; }
+.mk-mast .lede code, .mk-note code, .mk-scene-h code { font-family: "Geist Mono", monospace; font-size: .88em;
+  color: #c9c2b4; background: rgba(236,231,221,.06); border-radius: 4px; padding: 1px 5px; }
+
+/* The three inputs, up front */
+.mk-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); gap: 12px; margin-top: 34px; }
+.mk-input { border: 1px solid rgba(236,231,221,.09); border-radius: 12px; background: #161310;
+  padding: 15px 16px 16px; position: relative; overflow: hidden; }
+.mk-input::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+.mk-input .f { font-family: "Geist Mono", monospace; font-size: 10px; letter-spacing: .1em; color: var(--accent); }
+.mk-input p { font-size: 12.5px; line-height: 1.55; color: #958d7c; margin-top: 8px; }
+.mk-input p b { color: #c9c2b4; font-weight: 550; }
+
+/* Matrix */
+.mk-matrix { margin-top: 40px; border: 1px solid rgba(236,231,221,.09); border-radius: 14px;
+  background: #14120e; overflow: hidden; }
+.mk-matrix .gh { display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+  padding: 15px 18px; border-bottom: 1px solid rgba(236,231,221,.07); }
+.mk-matrix .gh h3 { font-family: "Fraunces", serif; font-weight: 500; font-size: 17px; }
+.mk-matrix .gh span { font-family: "Geist Mono", monospace; font-size: 9.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: #6b6354; }
+.mk-scroll { overflow-x: auto; }
+.mk-matrix table { width: 100%; border-collapse: collapse; min-width: 900px; }
+.mk-matrix th { font-family: "Geist Mono", monospace; font-size: 8.5px; font-weight: 500;
+  letter-spacing: .14em; text-transform: uppercase; color: #6b6354; text-align: left;
+  padding: 10px 14px; border-bottom: 1px solid rgba(236,231,221,.07); white-space: nowrap; }
+.mk-matrix td { padding: 11px 14px; border-bottom: 1px solid rgba(236,231,221,.045);
+  font-size: 12.5px; color: #958d7c; vertical-align: top; }
+.mk-matrix tr:last-child td { border-bottom: none; }
+.mk-matrix td.n { font-family: "Geist Mono", monospace; font-size: 10px; color: #6b6354; white-space: nowrap; }
+.mk-matrix td.w { color: #ece7dd; font-weight: 550; white-space: nowrap; }
+.mk-matrix td a { color: #a78bfa; text-decoration: none; border-bottom: 1px solid rgba(167,139,250,.3); }
+.mk-matrix code { font-family: "Geist Mono", monospace; font-size: 11px; color: #c9c2b4; }
+.mk-pill { display: inline-block; font-family: "Geist Mono", monospace; font-size: 8px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; border-radius: 3px; padding: 2px 6px; white-space: nowrap; }
+.mk-pill.ship { color: #7fb08a; background: rgba(127,176,138,.11); }
+.mk-pill.prop { color: #ddb36a; background: rgba(221,179,106,.11); }
+
+/* Scenes */
+.mk-scene { padding-top: 84px; scroll-margin-top: 20px; }
+/* The header is capped rather than full-bleed: at 1440 a space-between row would
+   strand the status badge ~700px from the title it labels. */
+.mk-scene-h { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px;
+  max-width: 940px; padding-bottom: 22px; border-bottom: 1px solid rgba(236,231,221,.07); }
+.mk-scene-h .l { min-width: 0; }
+.mk-scene-h .idx { font-family: "Geist Mono", monospace; font-size: 10px; letter-spacing: .2em;
+  text-transform: uppercase; color: #6b6354; }
+.mk-scene-h h2 { font-family: "Fraunces", serif; font-weight: 400; font-size: clamp(24px, 3.2vw, 34px);
+  line-height: 1.12; margin-top: 10px; letter-spacing: -.01em; }
+.mk-scene-h h2 em { font-style: italic; color: #a78bfa; }
+.mk-scene-h .desc { max-width: 660px; margin-top: 12px; font-size: 13.5px; line-height: 1.6; color: #958d7c; }
+.mk-scene-h .desc b { color: #c9c2b4; font-weight: 550; }
+.mk-badge { flex: none; font-family: "Geist Mono", monospace; font-size: 9.5px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase; border: 1px solid; border-radius: 6px; padding: 5px 9px; }
+.mk-badge.ship { color: #7fb08a; border-color: rgba(127,176,138,.28); background: rgba(127,176,138,.10); }
+.mk-badge.gap  { color: #ddb36a; border-color: rgba(221,179,106,.28); background: rgba(221,179,106,.10); }
+
+/* The rail frame — pinned to the app's real 338px rail width */
+.mk-stage { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; }
+.mk-rail { flex: none; width: 338px; max-width: 100%; }
+.mk-rail .cap { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
+.mk-rail .cap .t { font-family: "Geist Mono", monospace; font-size: 9px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: #6b6354; }
+.mk-rail .cap .t.now { color: #7fb08a; }
+.mk-rail .cap .t.prop { color: #ddb36a; }
+.mk-rail .frame { border: 1px solid rgba(236,231,221,.09); border-radius: 14px; background: #0f0d0a;
+  padding: 14px; box-shadow: 0 20px 50px -34px rgba(0,0,0,.9); }
+
+/* Annotations beside a frame. Capped so a two-rail scene (cases 06/08) doesn't
+   run the notes column to the viewport edge — measure stays readable. */
+.mk-side { flex: 1 1 300px; min-width: 260px; max-width: 520px; padding-top: 32px; }
+.mk-note { border-left: 2px solid var(--accent); padding: 2px 0 2px 14px; margin-bottom: 20px; }
+.mk-note .k { font-family: "Geist Mono", monospace; font-size: 8.5px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--accent); }
+.mk-note p { font-size: 12.5px; line-height: 1.58; color: #958d7c; margin-top: 7px; }
+.mk-note p b { color: #c9c2b4; font-weight: 550; }
+.mk-note p + p { margin-top: 8px; }
+
+.mk-foot { margin-top: 96px; padding-top: 28px; border-top: 1px solid rgba(236,231,221,.09); }
+.mk-foot h3 { font-family: "Fraunces", serif; font-weight: 500; font-size: 19px; }
+.mk-foot ol { margin-top: 16px; padding-left: 0; list-style: none; max-width: 760px; }
+.mk-foot li { display: flex; gap: 13px; padding: 12px 0; border-bottom: 1px solid rgba(236,231,221,.05); }
+.mk-foot li .num { font-family: "Geist Mono", monospace; font-size: 10px; color: #6b6354; flex: none;
+  padding-top: 2px; width: 20px; }
+.mk-foot li b { display: block; font-size: 13.5px; font-weight: 550; color: #ece7dd; }
+.mk-foot li span { display: block; font-size: 12.5px; line-height: 1.55; color: #958d7c; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="mk-wrap">
+
+  <header class="mk-mast">
+    <div class="eyebrow">Timeline rail · chapter meetings</div>
+    <h1>The notes card,<br><em>in every state it can reach</em></h1>
+    <p class="lede">
+      A chapter meeting's <code>description</code> <b>is</b> its minutes — the same column the
+      Chapter page's minutes textarea writes. The rail used to dump that whole field into a
+      one-line meta row. It now renders a dedicated block that shows the <b>AI summary</b> when
+      one exists and falls back to the <b>raw minutes</b> when the user never asked for one.
+      Three independent fields decide which frame you get, so there are more than two states.
+    </p>
+
+    <div class="mk-inputs">
+      <div class="mk-input" style="--accent:#a78bfa">
+        <div class="f">description</div>
+        <p>The minutes. Can be <b>empty</b>, four junk characters, or 1,700 words. Editing it bumps <code>notesUpdatedAt</code>.</p>
+      </div>
+      <div class="mk-input" style="--accent:#7fb08a">
+        <div class="f">notesSummary</div>
+        <p>The AI recap. Absent until someone presses <b>Summarize</b> on the Chapter page — never generated automatically.</p>
+      </div>
+      <div class="mk-input" style="--accent:#ddb36a">
+        <div class="f">notesSummaryAt vs notesUpdatedAt</div>
+        <p>Minutes edited <b>after</b> the summary was made (past a 2s grace) ⇒ the summary is stale and says so.</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══ MATRIX ══════════════════════════════════════════════════════════ -->
+  <section class="mk-matrix">
+    <div class="gh">
+      <h3>Eight cases</h3>
+      <span>5 shipped · 3 open</span>
+    </div>
+    <div class="mk-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Case</th><th>description</th><th>notesSummary</th><th>Renders</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="n">01</td><td class="w"><a href="#s1">Nothing yet</a></td>
+            <td><code>""</code></td><td><code>null</code></td>
+            <td>No block at all</td><td><span class="mk-pill ship">Shipped</span></td>
+          </tr>
+          <tr>
+            <td class="n">02</td><td class="w"><a href="#s2">Scribble</a></td>
+            <td><code>"ljvowjeFPONewpfn"</code></td><td><code>null</code></td>
+            <td>Minutes card, raw</td><td><span class="mk-pill ship">Shipped</span></td>
+          </tr>
+          <tr>
+            <td class="n">03</td><td class="w"><a href="#s3">Real minutes, never summarized</a></td>
+            <td>1,743 chars</td><td><code>null</code></td>
+            <td>Minutes card, scrolls at 320px</td><td><span class="mk-pill ship">Shipped</span></td>
+          </tr>
+          <tr>
+            <td class="n">04</td><td class="w"><a href="#s4">Summarized</a></td>
+            <td>1,743 chars</td><td>739 chars</td>
+            <td>Violet AI Summary block</td><td><span class="mk-pill ship">Shipped</span></td>
+          </tr>
+          <tr>
+            <td class="n">05</td><td class="w"><a href="#s5">Summary went stale</a></td>
+            <td>edited after</td><td>739 chars</td>
+            <td>Gold block + warning line</td><td><span class="mk-pill ship">Shipped</span></td>
+          </tr>
+          <tr>
+            <td class="n">06</td><td class="w"><a href="#s6">Below the summarizer's floor</a></td>
+            <td>&lt; 20 chars</td><td><code>null</code></td>
+            <td>Identical to case 2 — no hint that a summary is impossible</td>
+            <td><span class="mk-pill prop">Open</span></td>
+          </tr>
+          <tr>
+            <td class="n">07</td><td class="w"><a href="#s7">Summary present, minutes unreachable</a></td>
+            <td>1,743 chars</td><td>739 chars</td>
+            <td>Summary only — the rail has no path to the full minutes</td>
+            <td><span class="mk-pill prop">Open</span></td>
+          </tr>
+          <tr>
+            <td class="n">08</td><td class="w"><a href="#s8">Summary of deleted minutes</a></td>
+            <td><code>""</code> (cleared)</td><td>739 chars</td>
+            <td>Summary of text that no longer exists, no warning</td>
+            <td><span class="mk-pill prop">Open</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ 01 ══════════════════════════════════════════════════════════════ -->
+  <section class="mk-scene" id="s1">
+    <div class="mk-scene-h">
+      <div class="l">
+        <div class="idx">Case 01</div>
+        <h2>Nothing <em>yet</em></h2>
+        <p class="desc">
+          The meeting hasn't happened, or nobody took minutes. <b>MeetingNotes returns null</b> —
+          no empty card, no "no notes yet" placeholder. The rail goes straight from the meta rows
+          to attendance. This is the majority of rows in a real chapter: 8 of the 10 meetings in
+          the dev org have <code>description = ""</code>.
+        </p>
+      </div>
+      <span class="mk-badge ship">Shipped</span>
+    </div>
+
+    <div class="mk-stage">
+      <div class="mk-rail">
+        <div class="cap"><span class="t now">As shipped</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-hero">
+                <div class="tags"><span class="cat">Chapter</span><span class="req">Required</span></div>
+                <h3>Chapter Meeting</h3>
+                <div class="date"><span class="d">TUE 26 May</span><span class="rel">in 4 days</span></div>
+              </div>
+              <div class="ev-meta">
+                <div class="ev-meta-row"><span class="lab">Time</span>7:00 PM</div>
+                <div class="ev-meta-row"><span class="lab">Where</span>Chapter Room</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-side">
+        <div class="mk-note" style="--accent:#7fb08a">
+          <div class="k">Why no placeholder</div>
+          <p>
+            An empty "Minutes" card on a meeting that hasn't happened is noise on the most common
+            row in the list. The rail already tells you the meeting is <b>in 4 days</b>; absence
+            reads correctly here.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#6b6354">
+          <div class="k">Unchanged from before</div>
+          <p>
+            The old code also rendered nothing when <code>description</code> was empty — this case
+            is the one the redesign didn't touch.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 02 ══════════════════════════════════════════════════════════════ -->
+  <section class="mk-scene" id="s2">
+    <div class="mk-scene-h">
+      <div class="l">
+        <div class="idx">Case 02</div>
+        <h2>A <em>scribble</em></h2>
+        <p class="desc">
+          Someone opened the minutes box and mashed the keyboard. Real row from the dev DB
+          (event #135, "Meeting 14"). The card renders it verbatim in a plain <b>Minutes</b>
+          card — <code>white-space: pre-wrap</code>, no markdown parsing, because raw minutes are
+          not the summarizer's dialect and shouldn't be reinterpreted as one.
+        </p>
+      </div>
+      <span class="mk-badge ship">Shipped</span>
+    </div>
+
+    <div class="mk-stage">
+      <div class="mk-rail">
+        <div class="cap"><span class="t now">As shipped</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-hero">
+                <div class="tags"><span class="cat">Chapter</span><span class="req">Required</span></div>
+                <h3>Meeting 14</h3>
+                <div class="date"><span class="d">MON 29 June</span><span class="rel">69 days ago</span></div>
+              </div>
+              <div class="ev-meta">
+                <div class="ev-meta-row"><span class="lab">Time</span>4:03</div>
+                <div class="ev-meta-row"><span class="lab">Where</span>Laundry Room</div>
+              </div>
+              <div class="ev-notes">
+                <div class="ev-notes-head"><span class="lab">Minutes</span></div>
+                <div class="ev-notes-body raw">ljvowjeFPONewpfn</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-side">
+        <div class="mk-note" style="--accent:#7fb08a">
+          <div class="k">The label carries the meaning</div>
+          <p>
+            <b>Minutes</b> in mono caps says "this is the raw text a person typed". The violet
+            AI badge is reserved for generated content, so the two are never confusable at a
+            glance — which is the whole point of splitting them.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#ddb36a">
+          <div class="k">Also case 06</div>
+          <p>
+            At 16 characters this is <b>below the summarizer's 20-char floor</b>. The card gives
+            no sign of that. See <a href="#s6" style="color:#ddb36a">case 06</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 03 ══════════════════════════════════════════════════════════════ -->
+  <section class="mk-scene" id="s3">
+    <div class="mk-scene-h">
+      <div class="l">
+        <div class="idx">Case 03</div>
+        <h2>Real minutes, <em>never summarized</em></h2>
+        <p class="desc">
+          The case the feature exists to respect: <b>the user never asked for a summary</b>, so
+          the rail shows the minutes as written. 1,743 characters of officer-report shorthand,
+          capped at 320px and scrolling inside the block rather than running the rail off-screen.
+        </p>
+      </div>
+      <span class="mk-badge ship">Shipped</span>
+    </div>
+
+    <div class="mk-stage">
+      <div class="mk-rail">
+        <div class="cap"><span class="t now">As shipped</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-hero">
+                <div class="tags"><span class="cat">Chapter</span><span class="req">Required</span></div>
+                <h3>Chapter Meeting</h3>
+                <div class="date"><span class="d">TUE 9 June</span><span class="rel">89 days ago</span></div>
+              </div>
+              <div class="ev-meta">
+                <div class="ev-meta-row"><span class="lab">Time</span>7:00 PM</div>
+                <div class="ev-meta-row"><span class="lab">Where</span>Chapter Room</div>
+              </div>
+              <div class="ev-notes">
+                <div class="ev-notes-head"><span class="lab">Minutes</span></div>
+                <div class="ev-notes-body raw"># Meeting Minutes -
+
+NAPC Delegate - No update
+
+Alumni Chair - finish email by tn, just schedule send it tmr
+
+Stroll Chair - finish formations gang baby today + Judy, finalized whos in which dance, hell week starts next week
+
+Brotherhood chair - not throwing this weekend, sunday plan some shi together
+
+Banquet chair - everything done, Ke needs to send treasury decoration price, backdrop is clean, need to find projector and check if it works, install video arijit gon be working NEED VIDEOS FROM ALL BROS
+
+PR - SEND PICS OF BROS IN SUITS FOR SHAVE A LAMBDA BY TMR NIGHT, find old flier to post for the weekend, posted crepe fundy, China night afters video due by APRIL 10TH,
+
+SOCIAL - Throwing this friday and will be throwing every weekend till May 2nd, Lake george plan w sigmas May 8-10, Whole UConn Chap pullin up for China night - prolly bringin Lowell Deltas w em NEED A HEADCOUNT, China night use trap door not back door</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-side">
+        <div class="mk-note" style="--accent:#a78bfa">
+          <div class="k">This is the "UNLESS"</div>
+          <p>
+            No summary exists because <b>nobody pressed Summarize</b> — not because one failed.
+            The card must not imply the AI had a turn and declined.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#7fb08a">
+          <div class="k">Scroll, not truncate</div>
+          <p>
+            <code>max-height: 320px; overflow-y: auto</code>. Truncating with an ellipsis would
+            hide the one thing the officer opened the row to read, and the rail is already a
+            scrolling column — a nested scroll is cheaper than a 40-screen rail.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#6b6354">
+          <div class="k">The leading <code>#</code></div>
+          <p>
+            Raw minutes are rendered as plain text, so an ATX heading stays visible as
+            <code>#</code>. Correct: this is a transcript of what someone typed, not a document
+            to re-render. The markdown parser only runs on summaries, whose dialect the prompt
+            pins to <code>**bold**</code> and <code>- </code> bullets.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 04 ══════════════════════════════════════════════════════════════ -->
+  <section class="mk-scene" id="s4">
+    <div class="mk-scene-h">
+      <div class="l">
+        <div class="idx">Case 04</div>
+        <h2>The <em>summarized</em> frame</h2>
+        <p class="desc">
+          Same meeting, after someone pressed Summarize on the Chapter page. The 1,743-character
+          transcript becomes a 739-character recap: <b>one opener, then Decisions / Action items /
+          Discussed</b>. Rendered through the summarizer's narrow dialect — bold-only lines become
+          violet section rules, <code>- </code> lines become bullets.
+        </p>
+      </div>
+      <span class="mk-badge ship">Shipped</span>
+    </div>
+
+    <div class="mk-stage">
+      <div class="mk-rail">
+        <div class="cap"><span class="t now">As shipped</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-hero">
+                <div class="tags"><span class="cat">Chapter</span><span class="req">Required</span></div>
+                <h3>Chapter Meeting</h3>
+                <div class="date"><span class="d">TUE 9 June</span><span class="rel">89 days ago</span></div>
+              </div>
+              <div class="ev-meta">
+                <div class="ev-meta-row"><span class="lab">Time</span>7:00 PM</div>
+                <div class="ev-meta-row"><span class="lab">Where</span>Chapter Room</div>
+              </div>
+              <div class="ev-notes summary">
+                <div class="ev-notes-head">
+                  <span class="ai-badge">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+                    AI Summary
+                  </span>
+                  <span class="gen">Generated May 23, 2:59 AM</span>
+                </div>
+                <div class="ev-notes-body">
+                  <p>Meeting focused on upcoming events, preparations, and responsibilities for the chapter.</p>
+                  <p class="sec">Decisions</p>
+                  <ul>
+                    <li>Need a headcount for China night.</li>
+                    <li>Use trap door for China night instead of back door.</li>
+                  </ul>
+                  <p class="sec">Action items</p>
+                  <ul>
+                    <li><strong>Alumni Chair:</strong> Finish email by tonight, schedule send for tomorrow.</li>
+                    <li><strong>Banquet Chair:</strong> Send treasury decoration price, find and check projector.</li>
+                    <li><strong>PR:</strong> Send pics of bros in suits for Shave a Lambda by tomorrow night.</li>
+                    <li><strong>Philanthropy:</strong> Send email tonight.</li>
+                    <li><strong>Community Service:</strong> Talk to SORC office for charity run hours.</li>
+                  </ul>
+                  <p class="sec">Discussed</p>
+                  <ul>
+                    <li>Hell week starts next week.</li>
+                    <li>Brotherhood chair plans activities for Sunday.</li>
+                    <li>Fundraising efforts and sales update.</li>
+                    <li>Charity run planned for the 26th.</li>
+                    <li>Academic focus on finals and internships.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-side">
+        <div class="mk-note" style="--accent:#a78bfa">
+          <div class="k">Violet = generated</div>
+          <p>
+            The tinted ground and the badge are load-bearing, not decoration. An officer scanning
+            the rail must never mistake <b>a model's paraphrase</b> for what the secretary wrote —
+            the timestamp names when it was produced.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#7fb08a">
+          <div class="k">Still scrolls</div>
+          <p>
+            Even the summary exceeds 320px here. Real recaps run to ~150 words by prompt, so this
+            is close to the worst case, and it still fits in two screens of the block.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#6b6354">
+          <div class="k">Dialect, not markdown</div>
+          <p>
+            The renderer handles exactly what the prompt emits: <code>**bold**</code>, bold-only
+            header lines, and <code>- </code> bullets. Anything else falls through as a paragraph —
+            a deliberate ceiling, not a gap.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 05 ══════════════════════════════════════════════════════════════ -->
+  <section class="mk-scene" id="s5">
+    <div class="mk-scene-h">
+      <div class="l">
+        <div class="idx">Case 05</div>
+        <h2>The summary <em>went stale</em></h2>
+        <p class="desc">
+          Someone edited the minutes after the summary was generated. <code>notesUpdatedAt</code>
+          now exceeds <code>notesSummaryAt</code> by more than the 2-second grace, so the whole
+          block <b>turns gold</b> and says why. The summary is still shown — it is still mostly
+          true, and hiding it would leave the officer with nothing.
+        </p>
+      </div>
+      <span class="mk-badge ship">Shipped</span>
+    </div>
+
+    <div class="mk-stage">
+      <div class="mk-rail">
+        <div class="cap"><span class="t now">As shipped</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-hero">
+                <div class="tags"><span class="cat">Chapter</span><span class="req">Required</span></div>
+                <h3>Chapter Meeting</h3>
+                <div class="date"><span class="d">TUE 9 June</span><span class="rel">89 days ago</span></div>
+              </div>
+              <div class="ev-meta">
+                <div class="ev-meta-row"><span class="lab">Time</span>7:00 PM</div>
+                <div class="ev-meta-row"><span class="lab">Where</span>Chapter Room</div>
+              </div>
+              <div class="ev-notes summary stale">
+                <div class="ev-notes-head">
+                  <span class="ai-badge">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+                    AI Summary
+                  </span>
+                  <span class="gen">Generated May 23, 2:59 AM</span>
+                </div>
+                <p class="ev-notes-stale">Notes have changed since this summary.</p>
+                <div class="ev-notes-body">
+                  <p>Meeting focused on upcoming events, preparations, and responsibilities for the chapter.</p>
+                  <p class="sec">Decisions</p>
+                  <ul>
+                    <li>Need a headcount for China night.</li>
+                    <li>Use trap door for China night instead of back door.</li>
+                  </ul>
+                  <p class="sec">Action items</p>
+                  <ul>
+                    <li><strong>Alumni Chair:</strong> Finish email by tonight, schedule send for tomorrow.</li>
+                    <li><strong>Banquet Chair:</strong> Send treasury decoration price, find and check projector.</li>
+                    <li><strong>PR:</strong> Send pics of bros in suits for Shave a Lambda by tomorrow night.</li>
+                    <li><strong>Philanthropy:</strong> Send email tonight.</li>
+                    <li><strong>Community Service:</strong> Talk to SORC office for charity run hours.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-side">
+        <div class="mk-note" style="--accent:#ddb36a">
+          <div class="k">Gold, not rose</div>
+          <p>
+            Stale is <b>caution, not error</b>. Rose is reserved for overdue deadlines and destructive
+            actions. A summary that trails its source by one edit is still the best available
+            account of the meeting.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#7fb08a">
+          <div class="k">The 2-second grace</div>
+          <p>
+            Summarizing writes <code>notesSummaryAt</code> while the last minutes edit may have
+            landed moments earlier. Without the grace, a fresh summary would flag itself stale on
+            the same request. Copied from the Chapter page so the two surfaces agree.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#ddb36a">
+          <div class="k">No way to act on it</div>
+          <p>
+            The Chapter page pairs this warning with a <b>Re-summarize</b> button. The rail names
+            the problem and offers no fix — you have to know to navigate to
+            <code>/[slug]/chapter</code>. See the proposal in
+            <a href="#s6" style="color:#ddb36a">case 06</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 06 ══════════════════════════════════════════════════════════════ -->
+  <section class="mk-scene" id="s6">
+    <div class="mk-scene-h">
+      <div class="l">
+        <div class="idx">Case 06 · open question</div>
+        <h2>Below the <em>summarizer's floor</em></h2>
+        <p class="desc">
+          <code>summarize-meeting/route.ts:38</code> refuses anything under 20 characters:
+          <b>"Not enough notes to summarize yet."</b> The card can't distinguish that from case 03,
+          so a 16-character scribble and a 1,700-word transcript get the same silent
+          <b>Minutes</b> header — one of which can never produce a summary.
+        </p>
+      </div>
+      <span class="mk-badge gap">Open</span>
+    </div>
+
+    <div class="mk-stage">
+      <div class="mk-rail">
+        <div class="cap"><span class="t now">As shipped</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-notes">
+                <div class="ev-notes-head"><span class="lab">Minutes</span></div>
+                <div class="ev-notes-body raw">ljvowjeFPONewpfn</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-rail">
+        <div class="cap"><span class="t prop">Proposed</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-notes">
+                <div class="ev-notes-head"><span class="lab">Minutes</span></div>
+                <div class="ev-notes-body raw">ljvowjeFPONewpfn</div>
+                <p class="ev-notes-hint" style="margin-top:9px">Too short to summarize — needs about 20 characters.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-side">
+        <div class="mk-note" style="--accent:#ddb36a">
+          <div class="k">And the summarizable case</div>
+          <p>
+            The mirror of this: minutes that are <b>long enough</b> and have no summary could
+            offer the action instead of just naming the state. Both variants below.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mk-stage" style="margin-top:34px">
+      <div class="mk-rail">
+        <div class="cap"><span class="t prop">Proposed · summarizable, no summary</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-notes">
+                <div class="ev-notes-head"><span class="lab">Minutes</span></div>
+                <div class="ev-notes-body raw">NAPC Delegate - No update
+
+Alumni Chair - finish email by tn, just schedule send it tmr
+
+Stroll Chair - finish formations gang baby today + Judy, finalized whos in which dance, hell week starts next week</div>
+                <button class="ev-notes-act">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+                  Summarize
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-rail">
+        <div class="cap"><span class="t prop">Proposed · stale, with the fix</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-notes summary stale">
+                <div class="ev-notes-head">
+                  <span class="ai-badge">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+                    AI Summary
+                  </span>
+                  <span class="gen">Generated May 23, 2:59 AM</span>
+                </div>
+                <p class="ev-notes-stale">Notes have changed since this summary.</p>
+                <div class="ev-notes-body">
+                  <p>Meeting focused on upcoming events, preparations, and responsibilities for the chapter.</p>
+                  <p class="sec">Decisions</p>
+                  <ul>
+                    <li>Need a headcount for China night.</li>
+                    <li>Use trap door for China night instead of back door.</li>
+                  </ul>
+                </div>
+                <button class="ev-notes-act">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+                  Re-summarize
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-side">
+        <div class="mk-note" style="--accent:#a78bfa">
+          <div class="k">Cost of shipping this</div>
+          <p>
+            <code>POST /api/ai/summarize-meeting</code> already exists and takes only an event id.
+            The rail would need the same busy/error handling the Chapter page has — roughly the
+            30 lines of <code>summarizeNotes</code> lifted across.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#6b6354">
+          <div class="k">Argument against</div>
+          <p>
+            The timeline rail is a <b>read surface</b>. Summarizing is authoring, and authoring
+            minutes already lives on the Chapter page. A cross-link ("Open in Chapter") may be
+            the more honest fix than duplicating the action.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 07 ══════════════════════════════════════════════════════════════ -->
+  <section class="mk-scene" id="s7">
+    <div class="mk-scene-h">
+      <div class="l">
+        <div class="idx">Case 07 · open question</div>
+        <h2>The minutes become <em>unreachable</em></h2>
+        <p class="desc">
+          Once a summary exists, the rail shows <b>only</b> the summary — by design, and that is
+          what was asked for. But the full minutes are then reachable from nowhere on this page.
+          An officer who wants the exact wording of a motion has no path to it and no signal that
+          a longer version exists.
+        </p>
+      </div>
+      <span class="mk-badge gap">Open</span>
+    </div>
+
+    <div class="mk-stage">
+      <div class="mk-rail">
+        <div class="cap"><span class="t prop">Proposed · disclosure</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-notes summary">
+                <div class="ev-notes-head">
+                  <span class="ai-badge">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+                    AI Summary
+                  </span>
+                  <span class="gen">Generated May 23, 2:59 AM</span>
+                </div>
+                <div class="ev-notes-body">
+                  <p>Meeting focused on upcoming events, preparations, and responsibilities for the chapter.</p>
+                  <p class="sec">Decisions</p>
+                  <ul>
+                    <li>Need a headcount for China night.</li>
+                    <li>Use trap door for China night instead of back door.</li>
+                  </ul>
+                  <p class="sec">Action items</p>
+                  <ul>
+                    <li><strong>Alumni Chair:</strong> Finish email by tonight, schedule send for tomorrow.</li>
+                    <li><strong>Banquet Chair:</strong> Send treasury decoration price, find and check projector.</li>
+                  </ul>
+                </div>
+                <button class="ev-notes-more">Show full minutes · 1,743 chars</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-side">
+        <div class="mk-note" style="--accent:#a78bfa">
+          <div class="k">Cheap and local</div>
+          <p>
+            One <code>useState</code>. The minutes are <b>already in the client</b> as
+            <code>event.description</code> — no fetch, no new endpoint. The toggle swaps the
+            summary body for the raw body in place.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#7fb08a">
+          <div class="k">It also fixes case 05</div>
+          <p>
+            When a summary is stale, "show full minutes" is exactly the escape hatch the officer
+            needs — the minutes are the current truth, the summary is the trailing one.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#6b6354">
+          <div class="k">Argument against</div>
+          <p>
+            The brief was <b>summary instead of notes</b>. A disclosure control re-admits the
+            thing that was meant to be hidden — though behind a deliberate click, not by default.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 08 ══════════════════════════════════════════════════════════════ -->
+  <section class="mk-scene" id="s8">
+    <div class="mk-scene-h">
+      <div class="l">
+        <div class="idx">Case 08 · open question</div>
+        <h2>A summary of <em>minutes that are gone</em></h2>
+        <p class="desc">
+          Someone summarized a meeting, then selected the whole minutes box and deleted it.
+          <code>notesSummary</code> survives — nothing clears it. The rail renders a confident
+          violet recap of a meeting whose <b>record is now empty</b>, and because the block is
+          not stale-flagged unless <code>notesUpdatedAt</code> moved, it may not even warn.
+        </p>
+      </div>
+      <span class="mk-badge gap">Open</span>
+    </div>
+
+    <div class="mk-stage">
+      <div class="mk-rail">
+        <div class="cap"><span class="t now">As shipped</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-notes summary stale">
+                <div class="ev-notes-head">
+                  <span class="ai-badge">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+                    AI Summary
+                  </span>
+                  <span class="gen">Generated May 23, 2:59 AM</span>
+                </div>
+                <p class="ev-notes-stale">Notes have changed since this summary.</p>
+                <div class="ev-notes-body">
+                  <p>Meeting focused on upcoming events, preparations, and responsibilities for the chapter.</p>
+                  <p class="sec">Decisions</p>
+                  <ul>
+                    <li>Need a headcount for China night.</li>
+                    <li>Use trap door for China night instead of back door.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-rail">
+        <div class="cap"><span class="t prop">Proposed · name it</span></div>
+        <div class="frame">
+          <div class="dash" data-dashboard-theme="dusk">
+            <div class="ev" style="--catc:#8fb0d6">
+              <div class="ev-notes summary stale">
+                <div class="ev-notes-head">
+                  <span class="ai-badge">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+                    AI Summary
+                  </span>
+                  <span class="gen">Generated May 23, 2:59 AM</span>
+                </div>
+                <p class="ev-notes-stale">The minutes this summarized have been deleted.</p>
+                <div class="ev-notes-body">
+                  <p>Meeting focused on upcoming events, preparations, and responsibilities for the chapter.</p>
+                  <p class="sec">Decisions</p>
+                  <ul>
+                    <li>Need a headcount for China night.</li>
+                    <li>Use trap door for China night instead of back door.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mk-side">
+        <div class="mk-note" style="--accent:#ddb36a">
+          <div class="k">Rare, but it's the bad one</div>
+          <p>
+            Every other case degrades to <b>less information</b>. This one degrades to
+            <b>information with no source</b> — a recap presented as the meeting's record when the
+            record was withdrawn. That's the failure worth spending a branch on.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#7fb08a">
+          <div class="k">Two lines</div>
+          <p>
+            <code>summary &amp;&amp; !minutes</code> is already computed in
+            <code>MeetingNotes</code>; it only needs its own copy string. No schema change, no
+            new field.
+          </p>
+        </div>
+        <div class="mk-note" style="--accent:#a78bfa">
+          <div class="k">The other half</div>
+          <p>
+            Arguably the <b>summarizer</b> should clear <code>notesSummary</code> when the
+            description is emptied — a server-side fix in <code>updateCalendar</code> that would
+            make this case unreachable instead of merely labelled.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ FOOT ═══════════════════════════════════════════════════════════ -->
+  <footer class="mk-foot">
+    <h3>What this file is asking</h3>
+    <ol>
+      <li><span class="num">01</span><div>
+        <b>Cases 01–05 are shipped and verified.</b>
+        <span>Screenshotted against dev org <code>lpe</code> at <code>/lpe/timeline?event=5</code> and <code>?event=135</code>. Nothing here proposes changing them.</span>
+      </div></li>
+      <li><span class="num">02</span><div>
+        <b>Case 08 is a correctness bug, not a polish item.</b>
+        <span>A summary outliving its source is the only state that shows the officer something untrue. Cheapest real fix: clear <code>notesSummary</code> server-side when <code>description</code> is emptied.</span>
+      </div></li>
+      <li><span class="num">03</span><div>
+        <b>Case 07 is the most-requested-shaped gap.</b>
+        <span>"Show full minutes" costs one <code>useState</code> and the data is already client-side. It also gives case 05 its missing escape hatch.</span>
+      </div></li>
+      <li><span class="num">04</span><div>
+        <b>Case 06 is a judgment call about surface roles.</b>
+        <span>Putting Summarize / Re-summarize in the rail duplicates an authoring action onto a read surface. A cross-link to the Chapter page may be the better answer.</span>
+      </div></li>
+    </ol>
+  </footer>
+
+</div>
+</body>
+</html>
