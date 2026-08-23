@@ -194,8 +194,11 @@ async function syncServiceEvent(
 }
 
 async function removeServiceEvent(tx: Prisma.TransactionClient, calendarEventId: number) {
-  const linked = await tx.serviceEvent.findUnique({ where: { calendarEventId }, select: { id: true } });
-  if (linked) await tx.serviceEvent.delete({ where: { id: linked.id } });
+  // deleteMany, not findUnique-then-delete: two concurrent demotes of the same
+  // event both find the row, and the loser's delete() then throws P2025 on a row
+  // that is already gone — surfacing as a bogus "Not found" on a click whose work
+  // actually completed. deleteMany treats "already deleted" as 0 rows, not an error.
+  await tx.serviceEvent.deleteMany({ where: { calendarEventId } });
 }
 
 type ManagedType = { slug: string; label: string; creatable: boolean; hidden: boolean };
@@ -434,6 +437,12 @@ export async function updateProgrammingTask(ctx: RequestContext, id: number, inp
   return full;
 }
 
+// Thrown to unwind the setStage transaction when a concurrent request already
+// claimed the same stage transition. A unique symbol, so it can never collide
+// with a real error: the catch rethrows anything that isn't identity-equal to
+// it, and this value never escapes the function.
+const RACE_LOST = Symbol("programming.stage.race-lost");
+
 /**
  * Promote/demote engine, and the one place the lane rules are enforced.
  *
@@ -487,29 +496,57 @@ export async function setStage(ctx: RequestContext, id: number, input: SetStageI
 
   let createdCalendarId: number | null = null;
   let deletedCalendarId: number | null = null;
+  // Set when a concurrent request already performed this exact transition. Not an
+  // error for the user — the event IS confirmed, just not by this request — so the
+  // transaction unwinds and we fall through to returning the winner's state.
+  let lostRace = false;
 
-  await ctx.db.$transaction(async (tx) => {
-    if (promoting) {
-      const ce = await tx.calendarEvent.create({
-        data: { organizationId: ctx.orgId, ...toCalendarFields(pe) },
-      });
-      await tx.programmingEvent.update({ where: { id }, data: { stage: next, calendarEventId: ce.id } });
-      if (isServiceCategory(pe.category)) {
-        await syncServiceEvent(tx, ctx.orgId, ce.id, pe);
+  try {
+    await ctx.db.$transaction(async (tx) => {
+      if (promoting) {
+        const ce = await tx.calendarEvent.create({
+          data: { organizationId: ctx.orgId, ...toCalendarFields(pe) },
+        });
+        // CLAIM the transition, don't assume it. `promoting` was decided from a
+        // read taken before this transaction opened, so two confirms of the same
+        // event both see calendarEventId == null and both reach this point. The
+        // `calendarEventId: null` guard makes the link a one-shot claim: the
+        // loser matches 0 rows and throws out, rolling back its CalendarEvent
+        // rather than overwriting the link and orphaning the winner's row on the
+        // Timeline with nothing able to edit or delete it.
+        const claimed = await tx.programmingEvent.updateMany({
+          where: { id, organizationId: ctx.orgId, calendarEventId: null },
+          data:  { stage: next, calendarEventId: ce.id },
+        });
+        if (claimed.count === 0) { lostRace = true; throw RACE_LOST; }
+        if (isServiceCategory(pe.category)) {
+          await syncServiceEvent(tx, ctx.orgId, ce.id, pe);
+        }
+        createdCalendarId = ce.id;
+      } else if (demoting) {
+        const calId = pe.calendarEventId!;
+        if (isServiceCategory(pe.category)) await removeServiceEvent(tx, calId);
+        // Same one-shot claim on the way down: two concurrent demotes would both
+        // try to delete the same CalendarEvent, and the loser would fail on a row
+        // that no longer exists. Releasing the link is what earns the delete.
+        const released = await tx.programmingEvent.updateMany({
+          where: { id, organizationId: ctx.orgId, calendarEventId: calId },
+          data:  { stage: next, calendarEventId: null },
+        });
+        if (released.count === 0) { lostRace = true; throw RACE_LOST; }
+        await tx.calendarEvent.delete({ where: { id: calId } });
+        deletedCalendarId = calId;
+      } else {
+        await tx.programmingEvent.update({ where: { id }, data: { stage: next } });
       }
-      createdCalendarId = ce.id;
-    } else if (demoting) {
-      const calId = pe.calendarEventId!;
-      if (isServiceCategory(pe.category)) await removeServiceEvent(tx, calId);
-      // Null the link first so the FK SET NULL doesn't race the row delete, then
-      // remove the CalendarEvent (drops it from the Timeline).
-      await tx.programmingEvent.update({ where: { id }, data: { stage: next, calendarEventId: null } });
-      await tx.calendarEvent.delete({ where: { id: calId } });
-      deletedCalendarId = calId;
-    } else {
-      await tx.programmingEvent.update({ where: { id }, data: { stage: next } });
-    }
-  });
+    });
+  } catch (e) {
+    if (e !== RACE_LOST) throw e;
+  }
+
+  // The other request already did this, emitted the events, and its CalendarEvent
+  // is the live one. Return the committed state instead of a spurious error.
+  if (lostRace) return loadTask(ctx, id, deps);
 
   // `published` says whether this move changed what the CHAPTER can see, which is
   // the fact a notification handler would care about — a stage column moving is
