@@ -274,6 +274,60 @@ describe("setStage", () => {
     expect(await testPrisma.serviceEvent.findUnique({ where: { calendarEventId: calId } })).toBeNull();
   });
 
+  it("a double-clicked Confirm publishes exactly one CalendarEvent", async () => {
+    // The double-click. setStage decides `promoting` from a read taken before its
+    // transaction opens, so two in-flight confirms both saw calendarEventId ==
+    // null and both created a calendar row; the second UPDATE overwrote the link
+    // and left the first row orphaned — on every member's Timeline, absent from
+    // the Events board (which lists ProgrammingEvent), and editable from nowhere.
+    const { org, admin } = await seedOrg();
+    const ctx = ctxFor(org.id, admin.id);
+    const owner = await seedOwner(org.id, "Race Owner");
+    const task = await createProgrammingTask(ctx, {
+      title: "Double Clicked", category: "social", dueDate: "2026-09-12",
+      location: "House", ownerBrotherId: owner.id,
+    });
+
+    // Both settle: losing the race is not a user-visible error, the event IS
+    // confirmed — just not by this request.
+    const results = await Promise.allSettled([
+      setStage(ctx, task.id, { stage: "confirmed" }),
+      setStage(ctx, task.id, { stage: "confirmed" }),
+    ]);
+    expect(results.every(r => r.status === "fulfilled")).toBe(true);
+    expect(results.every(r => (r as PromiseFulfilledResult<{ stage: string }>).value.stage === "confirmed")).toBe(true);
+
+    const pe = await testPrisma.programmingEvent.findUnique({ where: { id: task.id } });
+    expect(pe?.calendarEventId).not.toBeNull();
+
+    // The real assertion: no calendar row exists that no ProgrammingEvent owns.
+    const calendarRows = await testPrisma.calendarEvent.findMany({ where: { organizationId: org.id } });
+    expect(calendarRows).toHaveLength(1);
+    expect(calendarRows[0].id).toBe(pe!.calendarEventId);
+  });
+
+  it("a double-clicked demote deletes the CalendarEvent exactly once", async () => {
+    // Mirror image: both demotes read the same calendarEventId, and the loser
+    // deleted a CalendarEvent (and ServiceEvent) that was already gone, throwing
+    // a bogus "Not found" on a click whose work had in fact completed.
+    const { org, admin } = await seedOrg();
+    const ctx = ctxFor(org.id, admin.id);
+    const confirmed = await createConfirmed(ctx, {
+      title: "Park Cleanup", dueDate: "2026-09-19", location: "City Park", category: "service",
+    });
+
+    const results = await Promise.allSettled([
+      setStage(ctx, confirmed.id, { stage: "planning" }),
+      setStage(ctx, confirmed.id, { stage: "planning" }),
+    ]);
+    expect(results.every(r => r.status === "fulfilled")).toBe(true);
+
+    const pe = await testPrisma.programmingEvent.findUnique({ where: { id: confirmed.id } });
+    expect(pe?.calendarEventId).toBeNull();
+    expect(await testPrisma.calendarEvent.findMany({ where: { organizationId: org.id } })).toHaveLength(0);
+    expect(await testPrisma.serviceEvent.findMany({ where: { organizationId: org.id } })).toHaveLength(0);
+  });
+
   it("re-confirming after demotion recreates a CalendarEvent", async () => {
     const { org, admin } = await seedOrg();
     const ctx = ctxFor(org.id, admin.id);
