@@ -79,6 +79,7 @@ export type FlowAction =
   | { type: "toggleSeatArea"; index: number; areaId: string }
   | { type: "toggleSeatPerm"; index: number; perm: Permission }
   | { type: "addSeat"; seat: Seat }
+  | { type: "removeSeat"; index: number }
   | { type: "renameEventType"; slug: string; label: string }
   | { type: "recolorEventType"; slug: string; color: string; colorDark: string }
   | { type: "addEventType"; label: string; color: string; colorDark: string }
@@ -290,6 +291,20 @@ export function flowReducer(draft: Draft, action: FlowAction): Draft {
       );
     case "addSeat":
       return { ...draft, seats: [...draft.seats, action.seat] };
+    case "removeSeat": {
+      // The one seat that can never be deleted is the last full-authority one.
+      // Dropping it would leave a workspace nobody can administer: the founder
+      // seat is what provisioning turns into the `all` roleSeed, and every other
+      // seat carries only the MANAGE_* flags the founder ticked. provisionOrg
+      // does synthesize a founder role when no seed is flagged `all`, so the DB
+      // invariant holds either way — but it would resurrect the TEMPLATE's
+      // founder name/color, silently discarding the seat the founder built here.
+      // So refuse in the reducer and let the card hide its own × (see RolesStep).
+      const seat = draft.seats[action.index];
+      if (!seat) return draft;
+      if (seat.all && draft.seats.filter(s => s.all).length <= 1) return draft;
+      return { ...draft, seats: draft.seats.filter((_, i) => i !== action.index) };
+    }
     case "renameEventType": {
       const label = action.label.trim().slice(0, 40);
       if (!label) return draft;
