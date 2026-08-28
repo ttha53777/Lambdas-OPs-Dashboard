@@ -3,9 +3,18 @@
 /**
  * Step 3 — YOUR ROLES. Stacked role cards: renameable titles, workflow-gated
  * ability pills (whole-area grants), an Advanced disclosure of the individual
- * MANAGE_* flags, a hover peek of the concrete grants, and "+ Add a seat"
- * pulling from the org type's seat pool. Holder-name inputs were cut (no
- * invite step — seats describe authority, not people).
+ * MANAGE_* flags, a hover peek of the concrete grants, a per-card delete, and
+ * "+ Add a seat" pulling from the org type's seat pool.
+ *
+ * Every seat is deletable EXCEPT the full-authority founder one, which renders
+ * a YOU badge where the others render their ×. That is the invariant this step
+ * guards: an org must keep at least one role that can do everything, or the
+ * workspace it provisions has no one who can administer it. The reducer
+ * (removeSeat) refuses the same case, so a synthetic click can't route around
+ * the missing button.
+ *
+ * Holder-name inputs were cut (no invite step — seats describe authority, not
+ * people).
  */
 
 import { useState } from "react";
@@ -155,7 +164,18 @@ export function RolesStep({
                   />
                   <span className="rc-summary">{roleSummary(seat.permissions, enabled, seat.all)}</span>
                 </div>
-                {founder && <span className="rc-you">YOU</span>}
+                {founder ? (
+                  <span className="rc-you">YOU</span>
+                ) : (
+                  <button
+                    className="rc-x"
+                    title={`Delete ${seat.title}`}
+                    aria-label={`Delete ${seat.title}`}
+                    onClick={() => dispatch({ type: "removeSeat", index: i })}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
               <div className="pill-row">
                 {areas.map(area => {
