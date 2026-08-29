@@ -15,7 +15,7 @@ import {
   KIND_TO_TYPE,
   KIND_VARIANTS,
 } from "@/lib/onboarding/kinds";
-import { emptyDraft, type Draft } from "@/lib/onboarding/draft";
+import { draftToCreateOrgInput, emptyDraft, type Draft } from "@/lib/onboarding/draft";
 import { flowReducer } from "@/app/create/_components/flow-state";
 import { ALL_WORKFLOWS, ALWAYS_ON_WORKFLOWS, BASE_WORKFLOWS, BEAT_WORKFLOWS, getOrgType } from "@/lib/org-types";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -178,5 +178,56 @@ describe("flowReducer: metrics + founder title", () => {
     expect(flowReducer(draft, { type: "addCustomMetric", name: "   ", unit: null }).metrics.custom).toHaveLength(1);
     for (let i = 0; i < 6; i++) draft = flowReducer(draft, { type: "addCustomMetric", name: `M${i}`, unit: null });
     expect(draft.metrics.custom).toHaveLength(5);
+  });
+});
+
+describe("flowReducer: removeSeat", () => {
+  const seeded = (kind: "fraternity" | "club" = "fraternity") =>
+    flowReducer(emptyDraft(), { type: "setKind", kind });
+
+  it("deletes an ordinary seat by index", () => {
+    const draft = seeded();
+    const victim = draft.seats.findIndex(s => !s.all);
+    expect(victim).toBeGreaterThan(-1);
+    const title = draft.seats[victim]!.title;
+    const next = flowReducer(draft, { type: "removeSeat", index: victim });
+    expect(next.seats).toHaveLength(draft.seats.length - 1);
+    expect(next.seats.some(s => s.title === title)).toBe(false);
+  });
+
+  it("refuses to delete the last full-authority seat", () => {
+    const draft = seeded();
+    const founder = draft.seats.findIndex(s => s.all);
+    expect(founder).toBeGreaterThan(-1);
+    const next = flowReducer(draft, { type: "removeSeat", index: founder });
+    expect(next.seats).toEqual(draft.seats);
+    expect(next.seats.filter(s => s.all)).toHaveLength(1);
+  });
+
+  it("keeps an all-permission seat no matter how many ordinary seats are deleted", () => {
+    let draft = seeded();
+    // Walk the list from the end so each delete's index stays valid, and aim
+    // every action at the founder too — the guard, not the UI, is what holds.
+    for (let i = draft.seats.length - 1; i >= 0; i--) {
+      draft = flowReducer(draft, { type: "removeSeat", index: i });
+    }
+    expect(draft.seats).toHaveLength(1);
+    expect(draft.seats[0]!.all).toBe(true);
+  });
+
+  it("ignores an out-of-range index", () => {
+    const draft = seeded();
+    expect(flowReducer(draft, { type: "removeSeat", index: 99 }).seats).toEqual(draft.seats);
+    expect(flowReducer(draft, { type: "removeSeat", index: -1 }).seats).toEqual(draft.seats);
+  });
+
+  it("a seat deleted here never reaches the provisioning payload", () => {
+    const draft = seeded();
+    const victim = draft.seats.findIndex(s => !s.all);
+    const title = draft.seats[victim]!.title;
+    const next = flowReducer(draft, { type: "removeSeat", index: victim });
+    const seeds = draftToCreateOrgInput({ ...next, name: "Test Org" }).blueprint!.roleSeeds!;
+    expect(seeds.some(r => r.name === title)).toBe(false);
+    expect(seeds.filter(r => r.all)).toHaveLength(1);
   });
 });
