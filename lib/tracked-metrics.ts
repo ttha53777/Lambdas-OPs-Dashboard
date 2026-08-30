@@ -6,9 +6,6 @@ import { BUILTIN_METRIC_IDS, type BuiltinMetricId } from "./onboarding/kinds";
  * track a built-in hides its widget via OrganizationConfig.disabledFeatures
  * (opt-out map), which is what provisionOrg writes from the interview's
  * per-member metrics answer.
- *
- * `kpi-treasury` is deliberately absent: it follows the finance workflow, not a
- * per-member metric.
  */
 export const BUILTIN_METRIC_KPI: Record<BuiltinMetricId, string> = {
   attendance:   "kpi-attendance",

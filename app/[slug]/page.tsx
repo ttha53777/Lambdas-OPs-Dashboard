@@ -988,10 +988,6 @@ export default function Home() {
   // ballots to answer. Folded together with the widget's own toggle so a hidden
   // ballot card never even asks the server for polls.
   const ballotEnabled  = isNavVisible("Tasks", currentUser?.org?.enabledWorkflows ?? []) && feature("operations", "ballot");
-  // The `kpi-treasury` toggle narrowly means "the balance measure in the ledger
-  // strip" (see WORKFLOW_FEATURES), so it gates the tile only — hiding a strip
-  // tile must not also remove the full Treasury rail card.
-  const treasuryMeasureVisible = financeEnabled && feature("operations", "kpi-treasury");
   // "New Event" picker options — creatable, workflow-enabled, non-hidden types.
   const eventCategoryOptions = useMemo<CategoryOption[]>(
     () => eventTypes
@@ -1988,7 +1984,7 @@ export default function Home() {
                 periodic snapshot table — until then the headline stands alone. */}
             {(feature("operations", "kpi-attendance") || feature("operations", "kpi-dues") ||
               feature("operations", "kpi-gpa") || feature("operations", "kpi-service") ||
-              treasuryMeasureVisible || customMetricSnapshots.length > 0) && (
+              customMetricSnapshots.length > 0) && (
               <LedgerStrip>
                 {/* Each measure below asks the same question first: is there a
                     single record behind this number? With none, it prints an
@@ -2066,30 +2062,6 @@ export default function Home() {
                       : rosterLoaded ? "Nothing logged this term." : undefined}
                     onClick={() => setActiveDrawer("service")}
                     hideButton={isActiveOrgAdmin ? <DashHideButton label="Service Hours KPI" onHide={() => setWidgetHidden("kpi-service", true)} /> : undefined}
-                  />
-                )}
-                {treasuryMeasureVisible && (
-                  /* `hasTreasury` only means the fetch succeeded — on a new org
-                     it returns {balance: 0, trend: []}, which is why this tile
-                     printed $0 on day one despite already having an em-dash
-                     branch. An empty trend means the books have no entries. */
-                  <Measure
-                    label={v("Treasury")}
-                    loading={!treasuryLoaded}
-                    error={treasuryFailed}
-                    onRetry={retrySections}
-                    unset={!hasTreasuryData}
-                    unitLeading="$"
-                    value={hasTreasuryData ? liveBalance!.toLocaleString() : "—"}
-                    note={hasTreasuryData
-                      ? `proj. ${fmt$(liveProjected!)}`
-                      : treasuryLoaded ? "No transactions yet." : undefined}
-                    /* No action here on purpose: the Treasury rail card sits
-                       directly below with the same move, and one measure per
-                       screen carrying a duplicate CTA both wraps this 1fr track
-                       onto a second line and splits the founder's attention. */
-                    onClick={() => setActiveDrawer("treasury")}
-                    hideButton={isActiveOrgAdmin ? <DashHideButton label="Treasury KPI" onHide={() => setWidgetHidden("kpi-treasury", true)} /> : undefined}
                   />
                 )}
                 {customMetricSnapshots.map(snap => {

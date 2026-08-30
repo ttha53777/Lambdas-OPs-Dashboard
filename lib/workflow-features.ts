@@ -50,7 +50,6 @@ export const WORKFLOW_FEATURES: Record<WorkflowId, readonly WorkflowFeature[]> =
     { id: "kpi-dues",         label: "Dues KPI",         description: "Outstanding-dues measure in the ledger strip." },
     { id: "kpi-gpa",          label: "GPA KPI",          description: "Chapter-GPA measure in the ledger strip." },
     { id: "kpi-service",      label: "Service Hours KPI", description: "Service-hours measure in the ledger strip." },
-    { id: "kpi-treasury",     label: "Treasury KPI",     description: "Treasury-balance measure in the ledger strip." },
     { id: "ballot",          label: "Ballot",            description: "Prompts a member to vote on an open poll assigned to them. Only appears when one is waiting." },
     { id: "health",          label: "Health widget",     description: "Chapter health dial and metric breakdown." },
     { id: "needs-attention", label: "Needs attention",   description: "Queue of overdue deadlines, outstanding dues, and at-risk members." },
