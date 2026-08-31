@@ -10,7 +10,7 @@ import { Modal, ConfirmDialog } from "../../components/dashboard/primitives";
 import { inputCls } from "../../components/dashboard/styles";
 import { requestJson, orgFetch, ApiError } from "../../lib/api";
 import { pad, toDateStr, daysFromToday } from "../../lib/dates";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useOrgPath } from "../../hooks/useOrgPath";
 import { CalendarEventForm, type CalendarDraft, type CategoryOption } from "../../components/timeline/CalendarEventForm";
 import { useActiveSemester } from "../../hooks/useActiveSemester";
@@ -195,6 +195,8 @@ function TimelineRow({
   return (
     <div
       ref={rowRef}
+      /* Scroll target for the ?event= deep link (see the effect in the page). */
+      data-event-id={event.id}
       className={`tl-row ${stateCls}${selected ? " selected" : ""}`}
       style={catStyleOf(types, event.category)}
       role="button"
@@ -758,6 +760,7 @@ function TimelineTodo({
 export default function TimelinePage() {
   const { currentUser, taskList, setTaskList, igTaskList, setIgTaskList, partyList, brotherList, setBrotherList, avatarRevision, can } = useChapter();
   const router  = useRouter();
+  const searchParams = useSearchParams();
   const orgPath = useOrgPath();
   const activeSemester = useActiveSemester();
   const handleSemesterError = useSemesterErrorHandler();
@@ -1139,6 +1142,35 @@ export default function TimelinePage() {
     if (smooth) main.scrollTo({ top, behavior: "smooth" });
     else main.scrollTop = top;
   }
+
+  // ── Deep link: /timeline?event=<id> opens straight onto that row ──────────
+  // The dashboard's This Week peek hands off here, so the row it named has to be
+  // selected AND visible. Runs once per id: after that the rail is the user's to
+  // steer, and re-selecting on every render would fight their next click.
+  const deepLinkedId = searchParams.get("event");
+  const didDeepLink  = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkedId || didDeepLink.current === deepLinkedId) return;
+    if (calendarLoading || allEvents.length === 0) return;
+    const match = allEvents.find(e => String(e.id) === deepLinkedId);
+    didDeepLink.current = deepLinkedId;
+    if (!match) return;
+    setSelectedEvent(match);
+    // The initial collapse hides every month but the current one, and a week can
+    // straddle a month boundary — so open the target's month before scrolling.
+    const groupId = match.date.slice(0, 7);
+    setCollapsedMonths(prev => {
+      if (!prev.has(groupId)) return prev;
+      const next = new Set(prev);
+      next.delete(groupId);
+      return next;
+    });
+    // Two frames: one for the month to expand, one for the row to lay out.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.querySelector(`[data-event-id="${match.id}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }));
+  }, [deepLinkedId, calendarLoading, allEvents]);
 
   // ── Collapse every month except the current one, once after events load ──
   const didInitCollapse = useRef(false);
