@@ -305,6 +305,31 @@
 .dash .ev-meta-row { border: 1px solid var(--line-soft); border-radius: 9px; background: var(--card); padding: 9px 12px; font-size: 12px; color: var(--ink-soft); }
 .dash .ev-meta-row .lab { font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-right: 8px; }
 .dash .ev-meta-row.ddl { border-color: var(--rose-bg); color: var(--rose); font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Meeting minutes in the rail — the AI summary when one exists, else the raw
+   minutes. The summary reads as a distinct (violet) artifact; unsummarized
+   minutes stay a plain card and scroll rather than run the rail long. */
+.dash .ev-notes { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--card); padding: 11px 13px; }
+.dash .ev-notes.summary { border-color: var(--vio-bg); background: var(--vio-bg); }
+.dash .ev-notes.summary.stale { border-color: var(--gold-bg); background: var(--gold-bg); }
+.dash .ev-notes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dash .ev-notes-head .lab { font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.dash .ev-notes-head .ai-badge { display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: 8.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--vio); border: 1px solid var(--vio-bg); background: var(--vio-bg); border-radius: 4px; padding: 2px 5px; }
+.dash .ev-notes.stale .ev-notes-head .ai-badge { color: var(--gold); border-color: var(--gold-bg); background: var(--gold-bg); }
+.dash .ev-notes-head .ai-badge svg { stroke: currentColor; }
+.dash .ev-notes-head .gen { font-family: var(--mono); font-size: 9px; color: var(--faint); }
+.dash .ev-notes-stale { font-size: 10.5px; color: var(--gold); margin-bottom: 7px; }
+/* Long minutes scroll inside the block rather than running the rail off-screen. */
+.dash .ev-notes-body { display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.55; color: var(--ink-soft);
+  max-height: 320px; overflow-y: auto; }
+.dash .ev-notes-body.raw { white-space: pre-wrap; }
+.dash .ev-notes-body strong { font-weight: 600; color: var(--ink); }
+.dash .ev-notes-body ul { margin: 0; padding-left: 16px; list-style: disc; display: flex; flex-direction: column; gap: 4px; }
+.dash .ev-notes-body .sec { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--vio); }
+.dash .ev-notes.stale .ev-notes-body .sec { color: var(--gold); }
+
 /* Cross-link to the Programming page for events promoted from a programming idea. */
 .dash .ev-prog-link {
   display: inline-flex; align-items: center; gap: 7px; margin-top: 10px;
