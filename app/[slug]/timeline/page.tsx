@@ -5,6 +5,7 @@ import { Sidebar } from "../../components/Sidebar";
 import { BrotherAvatar } from "../../components/BrotherAvatar";
 import { CalendarEvent, CalEventType, CalLayer, Task, InstagramTask, fmtDate, fmtRange, isoWeekBounds, taskAssigneeLabel } from "../../data";
 import { isEventTypeVisibleInPicker } from "../../../lib/event-types";
+import { CalendarCategory } from "../../../lib/state/calendar-category";
 import { useChapter } from "../../context/ChapterContext";
 import { Modal, ConfirmDialog } from "../../components/dashboard/primitives";
 import { inputCls } from "../../components/dashboard/styles";
@@ -96,6 +97,103 @@ function catStyleOf(types: Map<string, CalEventType>, category: string): React.C
 
 function catLabelOf(types: Map<string, CalEventType>, category: string): string {
   return types.get(category)?.label ?? category;
+}
+
+// ─── Meeting notes ────────────────────────────────────────────────────────────
+// A chapter meeting's `description` IS its minutes (that's the field the Chapter
+// page's minutes textarea writes). Minutes run long, so when the user has asked
+// the AI to summarize them we show the summary here instead — the rail is a
+// glance surface, not a reading surface. No summary means the user never asked
+// for one, and then the raw minutes are all there is to show.
+//
+// Branching on the `chapter` slug is safe: built-in slugs are immutable (see
+// lib/state/calendar-category.ts). Custom types that reuse `description` as a
+// blurb keep the plain one-line meta row.
+
+/** A meeting's minutes are its description; only `chapter` events carry minutes. */
+function isMeetingEvent(event: CalendarEvent): boolean {
+  return event.category === CalendarCategory.Chapter;
+}
+
+/** True when the minutes were edited after the summary was generated. */
+function isSummaryStale(event: CalendarEvent): boolean {
+  const summaryAt = event.notesSummaryAt ? new Date(event.notesSummaryAt).getTime() : 0;
+  const updatedAt = event.notesUpdatedAt ? new Date(event.notesUpdatedAt).getTime() : 0;
+  // Same 2s grace as the Chapter page: summarizing bumps both stamps in one
+  // request, so an exact-ish tie is not a real edit.
+  return summaryAt > 0 && updatedAt > summaryAt + 2000;
+}
+
+// Tiny renderer for the summarizer's narrow dialect — `**bold**`, "- " bullets,
+// bold-only lines as section headers. Mirrors the Chapter page's SummaryMarkdown,
+// but styled with the ledger's CSS classes instead of that page's Tailwind/dusk
+// literals so it themes with the rest of the timeline.
+function renderSummaryInline(text: string, keyPrefix: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") && part.length > 4
+      ? <strong key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</strong>
+      : <span key={`${keyPrefix}-${i}`}>{part}</span>,
+  );
+}
+
+function SummaryBody({ text }: { text: string }) {
+  const blocks: React.ReactNode[] = [];
+  let bullets: string[] = [];
+  const flush = () => {
+    if (bullets.length === 0) return;
+    const at = blocks.length;
+    blocks.push(<ul key={`ul-${at}`}>{bullets.map((b, i) => <li key={i}>{renderSummaryInline(b, `b-${at}-${i}`)}</li>)}</ul>);
+    bullets = [];
+  };
+  text.split("\n").forEach((raw, i) => {
+    const line = raw.trimEnd();
+    if (!line.trim()) { flush(); return; }
+    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
+    if (bullet) { bullets.push(bullet[1]); return; }
+    flush();
+    const header = line.match(/^\*\*([^*]+)\*\*:?\s*$/);
+    if (header) { blocks.push(<p key={`h-${i}`} className="sec">{header[1]}</p>); return; }
+    blocks.push(<p key={`p-${i}`}>{renderSummaryInline(line, `p-${i}`)}</p>);
+  });
+  flush();
+  return <div className="ev-notes-body">{blocks}</div>;
+}
+
+/** The minutes block for a meeting: the AI summary when there is one, else the raw minutes. */
+function MeetingNotes({ event }: { event: CalendarEvent }) {
+  const summary = (event.notesSummary ?? "").trim();
+  const minutes = (event.description ?? "").trim();
+  if (!summary && !minutes) return null;
+
+  if (!summary) {
+    return (
+      <div className="ev-notes">
+        <div className="ev-notes-head"><span className="lab">Minutes</span></div>
+        <div className="ev-notes-body raw">{minutes}</div>
+      </div>
+    );
+  }
+
+  const stale = isSummaryStale(event);
+  return (
+    <div className={`ev-notes summary${stale ? " stale" : ""}`}>
+      <div className="ev-notes-head">
+        <span className="ai-badge">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" />
+          </svg>
+          AI Summary
+        </span>
+        {event.notesSummaryAt && (
+          <span className="gen">
+            Generated {new Date(event.notesSummaryAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+          </span>
+        )}
+      </div>
+      {stale && <p className="ev-notes-stale">Notes have changed since this summary.</p>}
+      <SummaryBody text={summary} />
+    </div>
+  );
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -278,6 +376,7 @@ function EventDetail({
   onToggleDeadline: (complete: boolean) => void;
 }) {
   const isDeadline = event.category === "deadline";
+  const isMeeting  = isMeetingEvent(event);
   const isComplete = deadlineStatus === "done";
   const todayStr   = toDateStr(TODAY.year, TODAY.month, TODAY.day);
   const isPast     = event.date < todayStr;
@@ -427,12 +526,14 @@ function EventDetail({
         </div>
       </div>
 
-      {/* Meta */}
-      {(event.time || event.location || event.description || isDeadline) && (
+      {/* Meta. A meeting's description is its minutes, which get their own block
+          below (summarized when the user asked for a summary) rather than being
+          crammed into a one-line meta row. */}
+      {(event.time || event.location || (event.description && !isMeeting) || isDeadline) && (
         <div className="ev-meta">
           {event.time && <div className="ev-meta-row"><span className="lab">Time</span>{event.time}</div>}
           {event.location && <div className="ev-meta-row"><span className="lab">Where</span>{event.location}</div>}
-          {event.description && <div className="ev-meta-row">{event.description}</div>}
+          {event.description && !isMeeting && <div className="ev-meta-row">{event.description}</div>}
           {isDeadline && !isComplete && (
             <div className={`ev-meta-row ddl${isPast ? " over" : ""}`}>
               {isPast ? "Overdue — was due this date" : "Submit by this date"}
@@ -440,6 +541,8 @@ function EventDetail({
           )}
         </div>
       )}
+
+      {isMeeting && <MeetingNotes event={event} />}
 
       {/* Programming-backed events live in the Programming pipeline — jump there. */}
       {onOpenProgramming && (
