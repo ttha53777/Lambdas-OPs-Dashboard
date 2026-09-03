@@ -900,3 +900,133 @@ header.dash-toolbar {
 @media (prefers-reduced-motion: reduce) {
   .dash * { transition: none !important; animation: none !important; }
 }
+
+/* ─── This Week — row peek sheet ───────────────────────────────────────────────
+   The detail sheet a This Week row opens. It renders inside a Modal, which sits
+   OUTSIDE the .dash wrapper, so none of the dusk custom properties above are in
+   scope here — .wpeek redeclares the handful it needs rather than inheriting.
+   Values mirror the dusk block; the sheet is only ever shown over the dusk
+   dashboard. --peek-accent is set inline per row from the event's category color
+   (or gold for a deadline) and is the sheet's single piece of identity.
+   ───────────────────────────────────────────────────────────────────────────── */
+.wpeek {
+  --pk-ink:      #ece7dd;
+  --pk-ink-soft: #c9c2b4;
+  --pk-muted:    #958d7c;
+  --pk-faint:    #6b6354;
+  --pk-line:     rgba(236,231,221,.09);
+  --pk-ok:       #7fb08a;
+  --pk-gold:     #ddb36a;
+  --pk-rose:     #d98ba3;
+  --pk-mono:     var(--font-geist-mono), ui-monospace, Menlo, monospace;
+  --pk-serif:    var(--font-fraunces), Georgia, serif;
+  /* The body's own p-6 already pads the panel; the sheet only re-spaces inside. */
+  color: var(--pk-ink);
+}
+
+/* Hero. A left accent bar rather than a colored heading: it carries the category
+   without staining the title, and survives any category color the org picks. */
+.wpeek-hero { border-left: 2px solid var(--peek-accent); padding-left: 13px; }
+.wpeek-tags { display: flex; gap: 6px; align-items: center; margin-bottom: 7px; }
+.wpeek-cat {
+  font-family: var(--pk-mono); font-size: 9px; font-weight: 600; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--peek-accent);
+  /* color-mix keeps the chip wash tied to whatever accent the category supplies,
+     so a new event type needs no new rule here. */
+  background: color-mix(in srgb, var(--peek-accent) 13%, transparent);
+  border-radius: 4px; padding: 3px 6px;
+}
+.wpeek-req, .wpeek-done {
+  font-family: var(--pk-mono); font-size: 9px; font-weight: 600; letter-spacing: .13em;
+  text-transform: uppercase; border-radius: 4px; padding: 3px 6px;
+}
+.wpeek-req  { color: var(--pk-rose); background: rgba(217,139,163,.10); }
+.wpeek-done { color: var(--pk-ok);   background: rgba(127,176,138,.10); }
+
+.wpeek-title {
+  font-family: var(--pk-serif); font-size: 21px; font-weight: 500; line-height: 1.25;
+  color: var(--pk-ink); margin: 0;
+  /* The title is the one thing that may be long; wrap it rather than truncating,
+     since a clipped event name is exactly the question the peek exists to answer. */
+  overflow-wrap: anywhere;
+}
+.wpeek-when { display: flex; align-items: baseline; gap: 9px; margin: 7px 0 0; flex-wrap: wrap; }
+.wpeek-when .d { font-size: 12.5px; color: var(--pk-ink-soft); }
+.wpeek-when .rel {
+  font-family: var(--pk-mono); font-size: 9.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--pk-faint);
+}
+/* "Today" is the only relative label that changes what you do next, so it is the
+   only one that gets weight. Past is dimmed, not alarmed: a finished event on a
+   week view is normal, not a fault. */
+.wpeek-when .rel.now  { color: var(--pk-gold); }
+.wpeek-when .rel.past { color: var(--pk-faint); opacity: .75; }
+
+/* Facts. A two-column definition list so labels form a scannable left edge. */
+.wpeek-facts { margin: 17px 0 0; padding: 0; display: grid; gap: 9px; }
+.wpeek-fact { display: grid; grid-template-columns: 62px 1fr; gap: 12px; align-items: baseline; margin: 0; }
+.wpeek-fact.wide { grid-template-columns: 1fr; }
+.wpeek-fact dt {
+  font-family: var(--pk-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--pk-faint);
+}
+.wpeek-fact dd { margin: 0; font-size: 12.5px; color: var(--pk-ink-soft); line-height: 1.5; overflow-wrap: anywhere; }
+.wpeek-fact.wide dd { color: var(--pk-muted); font-size: 12px; }
+
+/* Attendance proportion bar. One bar answers "how's turnout" faster than four
+   numbers, and the legend carries the exact counts underneath for anyone who
+   needs them. */
+.wpeek-att { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--pk-line); }
+.wpeek-att-h { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 9px; }
+.wpeek-att-h .lab {
+  font-family: var(--pk-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--pk-faint);
+}
+.wpeek-att-h .count { font-family: var(--pk-mono); font-size: 12px; color: var(--pk-ink); }
+.wpeek-att-note { margin: 0; font-size: 11.5px; color: var(--pk-muted); }
+
+.wpeek-bar { display: flex; gap: 2px; height: 7px; border-radius: 4px; overflow: hidden; }
+.wpeek-bar .seg { display: block; flex-basis: 0; border-radius: 2px; min-width: 3px; }
+.wpeek-bar .seg.ok      { background: var(--pk-ok); }
+.wpeek-bar .seg.exc     { background: var(--pk-gold); }
+.wpeek-bar .seg.abs     { background: var(--pk-rose); }
+/* Not-logged is absence of data, not absence of a person — so it reads as an
+   empty track rather than as a fifth colored outcome. */
+.wpeek-bar .seg.unknown { background: rgba(236,231,221,.11); }
+
+.wpeek-legend {
+  list-style: none; margin: 9px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 5px 14px;
+}
+.wpeek-legend li { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--pk-muted); }
+.wpeek-legend .d { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.wpeek-legend .d.ok      { background: var(--pk-ok); }
+.wpeek-legend .d.exc     { background: var(--pk-gold); }
+.wpeek-legend .d.abs     { background: var(--pk-rose); }
+.wpeek-legend .d.unknown { background: rgba(236,231,221,.18); }
+
+.wpeek-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.wpeek-ghost, .wpeek-primary {
+  font-family: var(--pk-mono); font-size: 10px; letter-spacing: .09em; text-transform: uppercase;
+  border-radius: 7px; padding: 8px 13px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.wpeek-ghost   { background: transparent; border: 1px solid var(--pk-line); color: var(--pk-muted); }
+.wpeek-ghost:hover { color: var(--pk-ink); border-color: rgba(236,231,221,.2); }
+.wpeek-primary { background: transparent; border: 1px solid var(--peek-accent); color: var(--peek-accent); }
+.wpeek-primary:hover { background: color-mix(in srgb, var(--peek-accent) 12%, transparent); }
+.wpeek-ghost:focus-visible, .wpeek-primary:focus-visible { outline: 2px solid var(--peek-accent); outline-offset: 2px; }
+
+/* A This Week row is now a button. Reset the UA button chrome so it keeps the
+   exact row geometry it had as a div, and give it a hover/focus affordance so
+   the new interactivity is discoverable. */
+.dash button.week-item {
+  width: 100%; text-align: left; background: transparent; border: none; border-bottom: 1px solid var(--line-soft);
+  font: inherit; color: inherit; cursor: pointer;
+  transition: background .13s ease;
+}
+.dash button.week-item:last-child { border-bottom: none; }
+.dash button.week-item:hover { background: rgba(236,231,221,.035); }
+.dash[data-dashboard-theme="ivory"] button.week-item:hover { background: rgba(23,20,16,.03); }
+.dash button.week-item:focus-visible { outline: 2px solid var(--vio); outline-offset: -2px; }

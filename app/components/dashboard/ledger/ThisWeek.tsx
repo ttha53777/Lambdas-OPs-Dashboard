@@ -1,6 +1,7 @@
 import React from "react";
 import { fmtRange, taskAssigneeLabel, type CalendarEvent, type Task } from "../../../data";
 import { SectionError } from "./SectionError";
+import type { WeekPeekTarget } from "./WeekItemPeek";
 
 const WD = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 function weekday(iso: string): string {
@@ -17,6 +18,10 @@ type WeekItem = {
   meta: string;
   kind: "event" | "deadline";
   today: boolean;
+  /** The record behind the row, handed straight to the peek sheet. Kept on the
+   *  item rather than re-looked-up by id: the two kinds live in different lists,
+   *  and an id alone would need a lookup that can miss. */
+  target: WeekPeekTarget;
 };
 
 /**
@@ -34,6 +39,7 @@ export function ThisWeek({
   weekEnd,
   today,
   onAll,
+  onSelect,
   calendarEmpty = false,
   onAddEvent,
   loading = false,
@@ -46,6 +52,10 @@ export function ThisWeek({
   weekEnd: string;
   today: string;
   onAll?: () => void;
+  /** Opens the detail sheet for one row. A row click is a different intent from
+   *  the card click (which opens the deadlines drawer), so it stops propagation;
+   *  without this handler the rows stay inert text as before. */
+  onSelect?: (target: WeekPeekTarget) => void;
   /** True when the calendar has no events at all, not merely none this week.
    *  "Nothing on the agenda this week" is the right answer for a quiet week and
    *  the wrong one for a calendar nobody has opened yet. */
@@ -69,6 +79,7 @@ export function ThisWeek({
       meta: [e.time, e.location, e.mandatory ? "mandatory" : null].filter(Boolean).join(" · "),
       kind: "event",
       today: e.date === today,
+      target: { kind: "event", event: e },
     })),
     ...deadlines
       .filter(d => d.dueDate != null)
@@ -78,6 +89,7 @@ export function ThisWeek({
         meta: taskAssigneeLabel(d),
         kind: "deadline",
         today: d.dueDate === today,
+        target: { kind: "deadline", task: d },
       })),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
@@ -121,19 +133,37 @@ export function ThisWeek({
           )}
         </div>
       ) : (
-        items.map((it, i) => (
-          <div key={`${it.kind}-${i}`} className={it.today ? "week-item today" : "week-item"}>
-            <div className="day">{weekday(it.date)}<b>{dayNum(it.date)}</b></div>
-            <div className="what">
-              <p className="t">
-                {it.title}
-                {it.kind === "deadline" && <span className="ddl-pill">DEADLINE</span>}
-                {it.today && <span className="today-pill">TODAY</span>}
-              </p>
-              {it.meta && <p className="m">{it.meta}</p>}
-            </div>
-          </div>
-        ))
+        items.map((it, i) => {
+          const body = (
+            <>
+              <div className="day">{weekday(it.date)}<b>{dayNum(it.date)}</b></div>
+              <div className="what">
+                <p className="t">
+                  {it.title}
+                  {it.kind === "deadline" && <span className="ddl-pill">DEADLINE</span>}
+                  {it.today && <span className="today-pill">TODAY</span>}
+                </p>
+                {it.meta && <p className="m">{it.meta}</p>}
+              </div>
+            </>
+          );
+          const cls = it.today ? "week-item today" : "week-item";
+          // A real <button> rather than a click handler on the div: these rows are
+          // now the entry point to an event, so they have to be reachable and
+          // operable from the keyboard like any other control.
+          return onSelect ? (
+            <button
+              key={`${it.kind}-${i}`}
+              type="button"
+              className={cls}
+              onClick={(e) => { e.stopPropagation(); onSelect(it.target); }}
+            >
+              {body}
+            </button>
+          ) : (
+            <div key={`${it.kind}-${i}`} className={cls}>{body}</div>
+          );
+        })
       )}
     </section>
   );

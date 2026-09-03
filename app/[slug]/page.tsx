@@ -52,6 +52,7 @@ import { LedgerStrip, Measure } from "../components/dashboard/ledger/LedgerStrip
 import { NeedsAttention } from "../components/dashboard/ledger/NeedsAttention";
 import { RosterTable } from "../components/dashboard/ledger/RosterTable";
 import { ThisWeek } from "../components/dashboard/ledger/ThisWeek";
+import { WeekItemPeek, type WeekPeekTarget } from "../components/dashboard/ledger/WeekItemPeek";
 import { BallotCard } from "../components/dashboard/ledger/BallotCard";
 import { TreasuryRail } from "../components/dashboard/ledger/TreasuryRail";
 import { ActivityRail } from "../components/dashboard/ledger/ActivityRail";
@@ -869,6 +870,9 @@ export default function Home() {
   // error state alongside the context-owned sections.
   const [calendarFailed, setCalendarFailed] = useState(false);
   const [eventTypes,     setEventTypes]     = useState<CalEventType[]>([]);
+  // The This Week row whose detail sheet is open. Holds the record itself, not
+  // an id: the row already had it, and a refetch mid-peek must not blank the sheet.
+  const [weekPeek,       setWeekPeek]       = useState<WeekPeekTarget | null>(null);
   // Org roles for the "New task" modal's assignee picker (mirrors the tasks page).
   const [roles,          setRoles]          = useState<RoleOption[]>([]);
   const [rolesLoaded,    setRolesLoaded]    = useState(false);
@@ -989,6 +993,8 @@ export default function Home() {
   // ballot card never even asks the server for polls.
   const ballotEnabled  = isNavVisible("Tasks", currentUser?.org?.enabledWorkflows ?? []) && feature("operations", "ballot");
   // "New Event" picker options — creatable, workflow-enabled, non-hidden types.
+  // Slug → type, for resolving a peeked event's category label and color.
+  const eventTypeMap = useMemo(() => new Map(eventTypes.map(t => [t.slug, t])), [eventTypes]);
   const eventCategoryOptions = useMemo<CategoryOption[]>(
     () => eventTypes
       .filter(t => isEventTypeVisibleInPicker(t, currentUser?.org?.enabledWorkflows ?? []))
@@ -2175,6 +2181,7 @@ export default function Home() {
                     weekEnd={weekRange.end}
                     today={todayISO}
                     onAll={() => setWidgetDrawer("deadlines")}
+                    onSelect={setWeekPeek}
                     calendarEmpty={calendarLoaded && calendarList.length === 0}
                     /* Same two sections the digest waits on — the agenda merges
                        calendar events with deadlines due this week. */
@@ -2224,6 +2231,21 @@ export default function Home() {
       </div>
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
+      {/* Detail sheet for a This Week row. Read-only: it answers the questions a
+          one-line agenda row raises, then hands off to the page that owns editing. */}
+      {weekPeek && (
+        <WeekItemPeek
+          target={weekPeek}
+          today={todayISO}
+          eventTypes={eventTypeMap}
+          /* Attendance-exempt members are excluded from every other attendance
+             aggregate on this page, so they must not pad this denominator either. */
+          rosterSize={attendees.length}
+          onClose={() => setWeekPeek(null)}
+          onOpenEvent={(ev) => { setWeekPeek(null); router.push(orgPath(`/timeline?event=${ev.id}`)); }}
+          onOpenTask={(t) => { setWeekPeek(null); router.push(orgPath(`/tasks?task=${t.id}`)); }}
+        />
+      )}
       {activeModal === "expense" && isAdmin && (
         <Modal title="Log Expense" tone="dusk" onClose={closeModal}>
           <TxForm lockType="expense" tone="dusk" onSubmit={handleAddTransaction} onCancel={closeModal} />
