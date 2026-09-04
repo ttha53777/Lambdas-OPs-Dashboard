@@ -113,6 +113,18 @@ function loadHistory(): ChatMessage[] {
 function saveHistory(msgs: ChatMessage[]) {
   if (typeof window === "undefined") return;
   try {
+    // An empty thread never overwrites a stored one. ChatWidgetGate renders the
+    // widget only once currentUser.org has resolved off /api/auth/me, so on a
+    // fresh page load this component mounts, unmounts and mounts again while
+    // that settles — and every mount runs this effect once with `messages`
+    // still at its initial []. That wiped the stored thread before the mount
+    // that would have loaded it got there, so NOTHING survived a reload:
+    // answers, traces, and — the part that actually costs something — proposals
+    // left pending. A card you hadn't approved yet was destroyed by a refresh,
+    // which makes the pending state's implicit promise ("decide later") false.
+    // The only legitimate way to reach an empty thread is clearing it, which
+    // removes the key outright rather than saving [] over it.
+    if (msgs.length === 0) return;
     const trimmed = msgs.slice(-MAX_HISTORY).map((m, i, all) =>
       all.length - i > STEPS_KEPT ? { ...m, steps: undefined } : m,
     );
@@ -158,6 +170,8 @@ export function ChatWidget() {
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Guards the persist effect until loadHistory has run — see below.
+  const loadedRef = useRef(false);
 
   const actorName = currentUser?.name ?? "you";
 
@@ -175,13 +189,22 @@ export function ChatWidget() {
   // member has never opened the spotlight before (no seen-flag, no history).
   useEffect(() => {
     setMessages(loadHistory());
+    loadedRef.current = true;
     try {
       if (!localStorage.getItem(PULSE_SEEN_KEY) && !localStorage.getItem(STORAGE_KEY)) setPulse(true);
     } catch { /* ignore */ }
   }, []);
 
-  // Persist on every change.
-  useEffect(() => { saveHistory(messages); }, [messages]);
+  // Persist on every change — but never before the load above has run. Both
+  // effects fire on mount, and this one used to win with `messages` still at its
+  // initial [], overwriting the stored thread with an empty array before the
+  // loaded one was committed. Every past turn was destroyed on every reload,
+  // pending proposals included: a card left unapproved could not survive a
+  // refresh, so the "approve it later" the pending state promises was a lie.
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    saveHistory(messages);
+  }, [messages]);
 
   // Auto-scroll the thread to the newest turn.
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, streaming, scene]);
@@ -666,6 +689,10 @@ export function ChatWidget() {
 
   function handleNew() {
     if (streaming) stopStreaming();
+    // Starting a new thread is the one legitimate way to an empty one, so it
+    // clears the key itself — saveHistory deliberately won't write [] over a
+    // stored thread (see there for why an empty save is always a mount artifact).
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     setMessages([]);
     setInput("");
     setSelRow(-1);
