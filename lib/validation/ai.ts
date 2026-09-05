@@ -46,6 +46,21 @@ export const recordEventIdeaApprovalInput = z.object({
 });
 export type RecordEventIdeaApprovalInput = z.infer<typeof recordEventIdeaApprovalInput>;
 
+/**
+ * POST /api/ai/approvals — the inline-edit variant.
+ *
+ * A card the user corrected before approving carries a payload the signature no
+ * longer covers, so like the event-idea panel it sends the id of the row its
+ * POST created and the service reads that row back org-scoped. No sig is
+ * accepted here on purpose: one would only ever describe the pre-edit draft.
+ */
+export const recordEditedApprovalInput = z.object({
+  source:    z.literal("edited"),
+  action:    z.string().min(1).max(60),
+  subjectId: z.number().int().positive(),
+});
+export type RecordEditedApprovalInput = z.infer<typeof recordEditedApprovalInput>;
+
 /** GET /api/ai/approvals?kind= — filter the record by surface. */
 export const listApprovalsQuery = z.object({
   kind: z.enum(APPROVAL_KINDS as readonly [string, ...string[]]).optional(),

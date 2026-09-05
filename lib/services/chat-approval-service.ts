@@ -21,6 +21,7 @@ import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { verifyProposalBlob } from "@/lib/ai-approval-sig";
 import { PROPOSAL_META } from "@/lib/ai-tools";
 import { hasPermission } from "@/lib/permissions";
+import { fmtUsd } from "@/lib/money";
 import { emit } from "@/lib/events";
 import type { RecordApprovalInput } from "@/lib/validation/ai";
 
@@ -152,6 +153,147 @@ export async function recordChatApproval(ctx: RequestContext, input: RecordAppro
 }
 
 /**
+ * Record the approval of a proposal whose committed values are NOT the signed
+ * ones — an event booked from the idea panel, or any card the user corrected
+ * inline before approving it.
+ *
+ * Every other card is drafted complete and ratified as-is, so the client can
+ * echo the signed blob back and recordChatApproval verifies it verbatim. These
+ * two surfaces both break that assumption in the same way: the idea panel opens
+ * with a blank date the user fills in, and an inline edit rewrites a field the
+ * model got wrong. In both cases the signed payload and the payload that
+ * actually got written necessarily differ — echoing the former would file an
+ * audit row that misstates what happened, and echoing the latter would fail the
+ * HMAC and file nothing.
+ *
+ * So this path doesn't trust a blob at all. The client sends only the action and
+ * the id of the row its POST created; the audit line is then built by READING
+ * THAT ROW BACK through ctx.db, which is org-scoped — a caller can only ever
+ * record a row that exists, in their own org, and the recorded values are the
+ * committed ones by construction rather than by attestation. That is strictly
+ * stronger than a signature over client-held values, which is why no sig is
+ * required here. The permission check is unchanged: the actor must still hold
+ * the permission the action's meta names.
+ */
+
+type DisplayRow = { k: string; v: string; em?: boolean };
+
+/**
+ * Rebuild a card's display rows from the row the write actually created. Keyed
+ * by action so each surface reads back its own committed columns; returns null
+ * when the row is gone or the action reads back no subject (nothing to attest).
+ */
+async function readBackRows(
+  ctx: RequestContext,
+  action: string,
+  subjectId: number,
+): Promise<DisplayRow[] | null> {
+  switch (action) {
+    case "propose_add_calendar_event": {
+      const e = await ctx.db.calendarEvent.findUnique({ where: { id: subjectId } });
+      if (!e) return null;
+      return [
+        { k: "Title", v: e.title },
+        { k: "Date", v: e.date, em: true },
+        { k: "Category", v: e.category },
+        ...(e.time ? [{ k: "Time", v: e.time }] : []),
+        ...(e.location ? [{ k: "Location", v: e.location }] : []),
+        ...(e.mandatory ? [{ k: "Mandatory", v: "Yes" }] : []),
+      ];
+    }
+    case "propose_add_deadline": {
+      const t = await ctx.db.task.findUnique({ where: { id: subjectId } });
+      if (!t) return null;
+      return [
+        { k: "Title", v: t.title },
+        ...(t.dueDate ? [{ k: "Due", v: t.dueDate, em: true }] : []),
+        ...(t.notes ? [{ k: "Notes", v: t.notes.length > 80 ? `${t.notes.slice(0, 77)}…` : t.notes }] : []),
+      ];
+    }
+    case "propose_add_instagram_task": {
+      const i = await ctx.db.instagramTask.findUnique({ where: { id: subjectId } });
+      if (!i) return null;
+      return [
+        { k: "Title", v: i.title },
+        { k: "Type", v: i.type },
+        { k: "Due", v: i.dueDate, em: true },
+      ];
+    }
+    case "propose_add_programming_event": {
+      const p = await ctx.db.programmingEvent.findUnique({ where: { id: subjectId } });
+      if (!p) return null;
+      return [
+        { k: "Title", v: p.title },
+        { k: "Type", v: p.category },
+        ...(p.date ? [{ k: "Date", v: p.date, em: true }] : []),
+      ];
+    }
+    // Both treasury actions post a Transaction; they differ only in whether the
+    // row is attributed to a member, which is what makes it a dues payment.
+    case "propose_log_transaction":
+    case "propose_record_dues_payment": {
+      const t = await ctx.db.transaction.findUnique({ where: { id: subjectId } });
+      if (!t) return null;
+      const who = t.brotherId
+        ? (await ctx.db.member.findByBrotherId(t.brotherId))?.name ?? null
+        : null;
+      return [
+        ...(who ? [{ k: "Brother", v: who }] : [{ k: "Type", v: t.type === "income" ? "Income" : "Expense" }]),
+        { k: "Category", v: t.category },
+        { k: "Amount", v: fmtUsd(t.amount), em: true },
+        { k: "Date", v: t.date },
+        ...(who ? [] : [{ k: "For", v: t.description.length > 60 ? `${t.description.slice(0, 57)}…` : t.description }]),
+      ];
+    }
+    default:
+      return null;
+  }
+}
+
+export async function recordEditedApproval(ctx: RequestContext, action: string, subjectId: number) {
+  const meta = PROPOSAL_META[action];
+  if (!meta) throw new ValidationError("Unknown proposal action.");
+  if (!(ctx.isPlatformAdmin || ctx.isOrgAdmin || hasPermission(ctx.permissions, meta.perm))) {
+    throw new ForbiddenError(`Recording this approval requires ${meta.label}.`);
+  }
+
+  const rows = await readBackRows(ctx, action, subjectId);
+  if (!rows) throw new ValidationError("No such record.");
+
+  const display = { kind: meta.kind, title: meta.title, rows };
+  const approvedByRole = await actorRoleTitle(ctx);
+  const subjectType = SUBJECT_BY_ACTION[action] ?? null;
+
+  const row = await ctx.db.chatApproval.create({
+    data: {
+      kind: meta.kind,
+      action,
+      title: meta.title,
+      summary: deriveSummary(display),
+      rows,
+      permission: meta.perm,
+      permLabel: meta.label,
+      approvedById: ctx.actorId,
+      approvedByName: ctx.actorName,
+      approvedByRole,
+      subjectType,
+      subjectId,
+      requestId: ctx.requestId,
+    },
+  });
+
+  await emit(ctx, "assistant.proposal_approved", { type: "ChatApproval", id: row.id }, {
+    action,
+    kind: meta.kind,
+    permission: meta.perm,
+    subjectType,
+    subjectId,
+  }, { activity: false });
+
+  return shape(row);
+}
+
+/**
  * Record the approval of an event booked from the event-idea panel.
  *
  * The panel is the one proposal surface where the CONFIRMED values are not the
@@ -170,53 +312,14 @@ export async function recordChatApproval(ctx: RequestContext, input: RecordAppro
  * by construction rather than by attestation. That is strictly stronger than a
  * signature over client-held values, which is why no sig is required here.
  */
+/**
+ * The event-idea panel's entry point. Its card is completed by the user after
+ * signing, which is the same situation an inline edit creates, so it is the
+ * same readback — kept as a named export because the panel's request shape
+ * (`{ source: "event_idea", eventId }`) predates the general one.
+ */
 export async function recordEventIdeaApproval(ctx: RequestContext, eventId: number) {
-  const meta = PROPOSAL_META.propose_add_calendar_event;
-  if (!(ctx.isPlatformAdmin || ctx.isOrgAdmin || hasPermission(ctx.permissions, meta.perm))) {
-    throw new ForbiddenError(`Recording this approval requires ${meta.label}.`);
-  }
-
-  const event = await ctx.db.calendarEvent.findUnique({ where: { id: eventId } });
-  if (!event) throw new ValidationError("No such event.");
-
-  const rows = [
-    { k: "Title", v: event.title },
-    { k: "Date", v: event.date, em: true },
-    { k: "Category", v: event.category },
-    ...(event.time ? [{ k: "Time", v: event.time }] : []),
-    ...(event.location ? [{ k: "Location", v: event.location }] : []),
-    ...(event.mandatory ? [{ k: "Mandatory", v: "Yes" }] : []),
-  ];
-  const display = { kind: meta.kind, title: meta.title, rows };
-  const approvedByRole = await actorRoleTitle(ctx);
-
-  const row = await ctx.db.chatApproval.create({
-    data: {
-      kind: meta.kind,
-      action: "propose_add_calendar_event",
-      title: meta.title,
-      summary: deriveSummary(display),
-      rows,
-      permission: meta.perm,
-      permLabel: meta.label,
-      approvedById: ctx.actorId,
-      approvedByName: ctx.actorName,
-      approvedByRole,
-      subjectType: SUBJECT_BY_ACTION.propose_add_calendar_event,
-      subjectId: event.id,
-      requestId: ctx.requestId,
-    },
-  });
-
-  await emit(ctx, "assistant.proposal_approved", { type: "ChatApproval", id: row.id }, {
-    action: "propose_add_calendar_event",
-    kind: meta.kind,
-    permission: meta.perm,
-    subjectType: SUBJECT_BY_ACTION.propose_add_calendar_event,
-    subjectId: event.id,
-  }, { activity: false });
-
-  return shape(row);
+  return recordEditedApproval(ctx, "propose_add_calendar_event", eventId);
 }
 
 export async function listChatApprovals(ctx: RequestContext, opts: { kind?: string } = {}) {
