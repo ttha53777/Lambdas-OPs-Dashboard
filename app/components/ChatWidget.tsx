@@ -26,6 +26,7 @@ import { AnswerBlock } from "./chat/AnswerBlock";
 import { PeekSheet, type PeekSeed } from "./chat/PeekSheet";
 import { EventIdeaPanel, type EventIdeaSeed } from "./chat/EventIdeaPanel";
 import { WritCard } from "./chat/WritCard";
+import { useProposalChoices } from "./chat/useProposalChoices";
 import { ApprovalsView } from "./chat/ApprovalsView";
 import { dropProvisional, intentFor, planFor, reconcileStep, settleLedger } from "./chat/intent";
 import {
@@ -175,6 +176,11 @@ export function ChatWidget() {
 
   const actorName = currentUser?.name ?? "you";
 
+  // The option sets a card's category picker offers. Fetched on first open
+  // rather than on mount: the widget rides every dashboard route, and a member
+  // who never opens it should cost nothing.
+  const choices = useProposalChoices(open);
+
   // Probe whether the chat is enabled (key configured). Hide the launcher if not.
   useEffect(() => {
     let cancelled = false;
@@ -275,6 +281,12 @@ export function ChatWidget() {
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       // Esc unwinds one layer at a time — an open panel before the spotlight.
+      // A row being edited on a proposal card is the innermost layer of all and
+      // cancels itself on Escape. React has already reverted that row and
+      // unmounted the editor by the time a bubble-phase listener runs, so this
+      // check only sees the editor because we listen during capture — otherwise
+      // backing out of one field would close the spotlight on every card.
+      if (e.key === "Escape" && (document.activeElement as HTMLElement | null)?.closest(".wv.editing")) return;
       if (e.key === "Escape" && open && idea) { setIdea(null); return; }
       if (e.key === "Escape" && open && peek) { setPeek(null); return; }
       if (e.key === "Escape" && open) { closeSpotlight(); return; }
@@ -283,8 +295,8 @@ export function ChatWidget() {
         if (open) closeSpotlight(); else openSpotlight();
       }
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
   }, [open, peek, idea, openSpotlight, closeSpotlight]);
 
   // On open: dismiss the pulse for good; focus the composer.
@@ -556,7 +568,22 @@ export function ChatWidget() {
           const body = await res.clone().json() as { id?: unknown };
           if (typeof body?.id === "number") subjectId = body.id;
         } catch { /* endpoint returned no JSON id — record without a link */ }
-        if (card.sig) {
+        // An edited card can't echo its signature — the blob was signed over
+        // the model's values, not the user's, so it would either misstate the
+        // record or fail verification. It names the row the POST just created
+        // instead, and the server rebuilds the audit line by reading that row
+        // back org-scoped. Without an id there is nothing to read, so an edited
+        // card whose endpoint returned no id records nothing rather than
+        // recording the pre-edit draft as if it were what happened.
+        if (card.edited) {
+          if (subjectId !== null) {
+            void orgFetch("/api/ai/approvals", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ source: "edited", action: card.action, subjectId }),
+            }).catch(() => { /* audit record is best-effort */ });
+          }
+        } else if (card.sig) {
           void orgFetch("/api/ai/approvals", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -582,6 +609,20 @@ export function ChatWidget() {
     } catch (e) {
       updateProposal(msgId, card.id, { state: "error", resultMessage: e instanceof Error ? e.message : "Network error.", stamp: timeStamp() });
     }
+  }
+
+  /**
+   * Commit an inline correction to a pending card. The payload and the rows move
+   * together — the card the user reads after saving is the one that will post —
+   * and `edited` is set, which is what tells approveProposal that the signature
+   * no longer describes this card.
+   */
+  function editProposal(msgId: string, card: ProposalCard, payload: Record<string, unknown>, rows: ProposalCard["display"]["rows"]) {
+    updateProposal(msgId, card.id, {
+      payload,
+      display: { ...card.display, rows },
+      edited: true,
+    });
   }
 
   function discardProposal(msgId: string, card: ProposalCard) {
@@ -632,7 +673,13 @@ export function ChatWidget() {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
-      const typing = document.activeElement === textareaRef.current;
+      // Any focused field owns the keyboard, not just the composer. A writ card
+      // in edit mode puts real inputs in the thread, and Backspace there must
+      // delete a character rather than discard the card being corrected.
+      const active = document.activeElement;
+      const typing = active instanceof HTMLTextAreaElement
+        || active instanceof HTMLInputElement
+        || (active instanceof HTMLElement && active.isContentEditable);
       if (typing || scene !== "thread") return;
       const rows = lastAnswer?.answer?.rows ?? [];
       // Row navigation belongs to the thread; an open panel owns the keyboard.
@@ -825,6 +872,8 @@ export function ChatWidget() {
                                   card={card}
                                   onApprove={c => void approveProposal(m.id, c)}
                                   onDiscard={c => discardProposal(m.id, c)}
+                                  onEdit={(c, payload, rows) => editProposal(m.id, c, payload, rows)}
+                                  choices={choices}
                                 />
                               ))}
                             </>

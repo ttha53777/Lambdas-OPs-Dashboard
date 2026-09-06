@@ -335,6 +335,49 @@
 .chat-root .wrow .wk { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); width: 84px; flex-shrink: 0; }
 .chat-root .wrow .wv { font-size: 13px; color: var(--ink); font-family: var(--mono); overflow-wrap: anywhere; }
 .chat-root .wrow .wv.em { font-weight: 500; }
+/* ── Inline correction on a writ card ─────────────────────────────────────── */
+/* An editable value is a control that looks like the text it replaces: no box,
+   no button chrome, just the value where it always was. The affordance shows on
+   hover — a dotted underline and a faint ground — so a card at rest still reads
+   as a document to ratify rather than as a form to fill in. */
+.chat-root .wrow .wv.val {
+  font: inherit; font-family: var(--mono); font-size: 13px; color: var(--ink);
+  text-align: left; background: transparent; border: 0; padding: 2px 5px; margin: -2px -5px;
+  border-radius: 5px; cursor: text; overflow-wrap: anywhere;
+  border-bottom: 1px dashed transparent; transition: background .13s, border-color .13s;
+}
+.chat-root .wrow .wv.val.em { font-weight: 500; }
+.chat-root .wrow .wv.val:hover { background: var(--card); border-bottom-color: var(--line-med); }
+.chat-root .wrow .wv.val:focus-visible { outline: 1px solid var(--vio-line); outline-offset: 2px; }
+/* An optional field the model left out: the row exists so there is somewhere to
+   click, and its prompt reads as an invitation rather than as a value. */
+.chat-root .wrow .wv.val.empty { color: var(--faint); font-family: var(--sans); font-style: italic; }
+
+.chat-root .wrow.editable { align-items: center; }
+.chat-root .wrow .wv.editing { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.chat-root .wrow .wv.editing .einput { font-size: 13px; }
+.chat-root .wrow .wv.editing .einput.money { width: auto; flex: 0 1 130px; }
+.chat-root .wrow .wv.editing textarea.einput { resize: vertical; line-height: 1.5; }
+/* The category picker: a native select, tinted to the card rather than left as
+   a stock control, since the org's own labels are the whole point of it. */
+.chat-root .wrow .wv.editing .einput.choice {
+  width: auto; flex: 0 1 auto; max-width: 100%; cursor: pointer;
+  font-family: var(--mono); color: var(--ink); background: var(--card);
+  border: 1px solid var(--line-med); border-radius: 7px; padding: 4px 8px;
+}
+.chat-root .wrow .wv.editing .einput.choice:focus { border-color: var(--vio-line); }
+/* Said next to the field being typed in, not collected at the foot of the card:
+   the mistake and its explanation belong on the same line. */
+.chat-root .wproblem {
+  font-family: var(--serif); font-style: italic; font-size: 12px; color: var(--muted); white-space: nowrap;
+}
+/* Provenance, not decoration: these values are the officer's, not the model's. */
+.chat-root .writ .wedited {
+  margin-left: auto; flex-shrink: 0;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px;
+}
+
 .chat-root .writ .permline { display: flex; align-items: center; gap: 8px; padding: 10px 15px 0; font-family: var(--mono); font-size: 10px; letter-spacing: .03em; color: var(--faint); }
 .chat-root .writ .permline b { color: var(--muted); font-weight: 400; }
 .chat-root .writ .permline .lk { display: inline-flex; color: var(--faint); }

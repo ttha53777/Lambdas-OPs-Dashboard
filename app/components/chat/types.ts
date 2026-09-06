@@ -147,6 +147,13 @@ export interface ProposalCard {
   state: WritState;
   resultMessage?: string;
   stamp?: string;                  // "6:12 PM · Marcus S." — set when settled
+  /**
+   * The user corrected a field before approving. The payload and display rows
+   * are then the user's, not the ones the signature covers, so `sig` no longer
+   * describes this card — the approval is recorded by reading the created row
+   * back server-side instead. See proposal-edit.ts and recordEditedApproval.
+   */
+  edited?: boolean;
 }
 
 export interface ChatMessage {
